@@ -399,7 +399,9 @@ namespace Microsoft.SCIM
             }
             catch (HttpResponseException responseException)
             {
-                if (responseException.Response?.StatusCode != HttpStatusCode.NotFound)
+                var exStatusCode = responseException.Response?.StatusCode;
+                
+                if (exStatusCode != HttpStatusCode.NotFound)
                 {
                     if (this.TryGetMonitor(out IMonitor monitor))
                     {
@@ -412,12 +414,12 @@ namespace Microsoft.SCIM
                     }
                 }
 
-                if (responseException.Response?.StatusCode == HttpStatusCode.NotFound)
+                if (exStatusCode == HttpStatusCode.NotFound)
                 {
                     return this.ScimError(HttpStatusCode.NotFound, string.Format(SystemForCrossDomainIdentityManagementServiceResources.ResourceNotFoundTemplate, identifier));
                 }
 
-                return this.ScimError(HttpStatusCode.InternalServerError, responseException.Message);
+                return this.ScimError(exStatusCode ?? HttpStatusCode.InternalServerError, responseException.Message);
             }
             catch (Exception exception)
             {
