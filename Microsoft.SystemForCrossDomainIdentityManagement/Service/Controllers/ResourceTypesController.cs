@@ -7,12 +7,9 @@ namespace Microsoft.SCIM
     using System.Net;
     using System.Net.Http;
     using System.Web.Http;
-    using Microsoft.AspNetCore.Authorization;
-    using Microsoft.AspNetCore.Mvc;
 
-    [Route(ServiceConstants.RouteResourceTypes)]
+    [RoutePrefix(ServiceConstants.RouteResourceTypes)]
     [Authorize]
-    [ApiController]
     public sealed class ResourceTypesController : ControllerTemplate
     {
         public ResourceTypesController(IProvider provider, IMonitor monitor)

@@ -1,14 +1,13 @@
 // Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
 
+using System.Web.Http;
+
 namespace Microsoft.SCIM
 {
     using System;
-    using Microsoft.AspNetCore.Authorization;
-    using Microsoft.AspNetCore.Mvc;
 
-    [Route(ServiceConstants.RouteGroups)]
+    [RoutePrefix(ServiceConstants.RouteGroups)]
     [Authorize]
-    [ApiController]
     public sealed class GroupsController : ControllerTemplate<Core2Group>
     {
         public GroupsController(IProvider provider, IMonitor monitor)

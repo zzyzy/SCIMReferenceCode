@@ -1,14 +1,13 @@
 // Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
 
+using System.Web.Http;
+
 namespace Microsoft.SCIM
 {
     using System;
-    using Microsoft.AspNetCore.Authorization;
-    using Microsoft.AspNetCore.Mvc;
 
-    [Route(ServiceConstants.RouteUsers)]
+    [RoutePrefix(ServiceConstants.RouteUsers)]
     [Authorize]
-    [ApiController]
     public sealed class UsersController : ControllerTemplate<Core2EnterpriseUser>
     {
         public UsersController(IProvider provider, IMonitor monitor)

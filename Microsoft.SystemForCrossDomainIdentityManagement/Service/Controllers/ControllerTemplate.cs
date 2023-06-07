@@ -9,10 +9,8 @@ namespace Microsoft.SCIM
     using System.Net.Http;
     using System.Threading.Tasks;
     using System.Web.Http;
-    using Microsoft.AspNetCore.Mvc;
-    using Microsoft.AspNetCore.Mvc.WebApiCompatShim;
 
-    public abstract class ControllerTemplate : ControllerBase
+    public abstract class ControllerTemplate : BaseApiController
     {
         internal const string AttributeValueIdentifier = "{identifier}";
         private const string HeaderKeyContentType = "Content-Type";
@@ -53,12 +51,10 @@ namespace Microsoft.SCIM
 
         protected HttpRequestMessage ConvertRequest()
         {
-            HttpRequestMessageFeature hreqmf = new HttpRequestMessageFeature(this.HttpContext);
-            HttpRequestMessage result = hreqmf.HttpRequestMessage;
-            return result;
+            return Request;
         }
 
-        protected ObjectResult ScimError(HttpStatusCode httpStatusCode, string message)
+        protected IHttpActionResult ScimError(HttpStatusCode httpStatusCode, string message)
         {
             return StatusCode((int)httpStatusCode, new Core2Error(message, (int)httpStatusCode));
         }
@@ -91,8 +87,8 @@ namespace Microsoft.SCIM
         }
 
 
-        [HttpDelete(ControllerTemplate.AttributeValueIdentifier)]
-        public virtual async Task<IActionResult> Delete(string identifier)
+        [HttpDelete, Route(ControllerTemplate.AttributeValueIdentifier)]
+        public virtual async Task<IHttpActionResult> Delete(string identifier)
         {
             string correlationIdentifier = null;
             try
@@ -180,9 +176,9 @@ namespace Microsoft.SCIM
             }
         }
 
-        [HttpGet]
+        [HttpGet, Route("")]
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Naming", "CA1716:IdentifiersShouldNotMatchKeywords", MessageId = "Get", Justification = "The names of the methods of a controller must correspond to the names of hypertext markup verbs")]
-        public virtual async Task<ActionResult<QueryResponseBase>> Get()
+        public virtual async Task<IHttpActionResult> Get()
         {
             string correlationIdentifier = null;
             try
@@ -282,9 +278,9 @@ namespace Microsoft.SCIM
             }
         }
 
-        [HttpGet(ControllerTemplate.AttributeValueIdentifier)]
+        [HttpGet, Route(ControllerTemplate.AttributeValueIdentifier)]
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Naming", "CA1716:IdentifiersShouldNotMatchKeywords", MessageId = "Get", Justification = "The names of the methods of a controller must correspond to the names of hypertext markup verbs")]
-        public virtual async Task<IActionResult> Get([FromUri]string identifier)
+        public virtual async Task<IHttpActionResult> Get([FromUri]string identifier)
         {
             string correlationIdentifier = null;
             try
@@ -439,8 +435,8 @@ namespace Microsoft.SCIM
             }
         }
 
-        [HttpPatch(ControllerTemplate.AttributeValueIdentifier)]
-        public virtual async Task<IActionResult> Patch(string identifier, [FromBody]PatchRequest2 patchRequest)
+        [HttpPatch, Route(ControllerTemplate.AttributeValueIdentifier)]
+        public virtual async Task<IHttpActionResult> Patch(string identifier, [FromBody]PatchRequest2 patchRequest)
         {
             string correlationIdentifier = null;
 
@@ -555,8 +551,8 @@ namespace Microsoft.SCIM
             }
         }
 
-        [HttpPost]
-        public virtual async Task<ActionResult<Resource>> Post([FromBody]T resource)
+        [HttpPost, Route("")]
+        public virtual async Task<IHttpActionResult> Post([FromBody]T resource)
         {
             string correlationIdentifier = null;
 
@@ -653,8 +649,8 @@ namespace Microsoft.SCIM
             }
         }
 
-        [HttpPut(ControllerTemplate.AttributeValueIdentifier)]
-        public virtual async Task<ActionResult<Resource>> Put([FromBody]T resource, string identifier)
+        [HttpPut, Route(ControllerTemplate.AttributeValueIdentifier)]
+        public virtual async Task<IHttpActionResult> Put([FromBody]T resource, string identifier)
         {
             string correlationIdentifier = null;
 

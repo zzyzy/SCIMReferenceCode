@@ -7,12 +7,9 @@ namespace Microsoft.SCIM
     using System.Net;
     using System.Net.Http;
     using System.Web.Http;
-    using Microsoft.AspNetCore.Authorization;
-    using Microsoft.AspNetCore.Mvc;
 
-    [Route(ServiceConstants.RouteSchemas)]
+    [RoutePrefix(ServiceConstants.RouteSchemas)]
     [Authorize]
-    [ApiController]
     public sealed class SchemasController : ControllerTemplate
     {
         public SchemasController(IProvider provider, IMonitor monitor)
