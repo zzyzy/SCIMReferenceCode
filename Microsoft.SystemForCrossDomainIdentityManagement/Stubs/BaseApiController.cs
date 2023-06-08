@@ -34,7 +34,6 @@ namespace Microsoft.SCIM
 
         protected IHttpActionResult CreatedAtAction<T>(string actionName, T content)
         {
-            Response.Headers.Location = Request.RequestUri.OriginalString;
             var result = new NegotiatedContentResult<T>(HttpStatusCode.Created, content, this);
             return result;
         }

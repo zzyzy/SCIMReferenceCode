@@ -2,7 +2,7 @@
 {
     public class HttpResponse
     {
-        public string ContentType { get; set; } = "text/html";
+        public string ContentType { get; set; }
 
         public int StatusCode { get; set; } = -1;
 
