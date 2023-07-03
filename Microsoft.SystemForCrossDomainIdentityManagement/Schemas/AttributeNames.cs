@@ -96,5 +96,6 @@ namespace Microsoft.SCIM
         public const string Value = "value";
         public const string Version = "version";
         public const string Watermark = "watermark";
+        public const string LeaveDateTime = "leaveDateTime";
     }
 }
