@@ -37,7 +37,7 @@ namespace Microsoft.SCIM
         /// 
         /// </summary>
         [DataMember(Name = AttributeNames.LeaveDateTime, IsRequired = false, EmitDefaultValue = false)]
-        public DateTime LeaveDateTime
+        public DateTime? LeaveDateTime
         {
             get;
             set;
