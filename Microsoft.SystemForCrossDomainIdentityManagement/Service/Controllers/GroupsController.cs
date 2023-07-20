@@ -7,7 +7,7 @@ namespace Microsoft.SCIM
     using System;
 
     [RoutePrefix(ServiceConstants.RouteGroups)]
-    [Authorize]
+    // [Authorize]
     public sealed class GroupsController : ControllerTemplate<Core2Group>
     {
         public GroupsController(IProvider provider, IMonitor monitor)
