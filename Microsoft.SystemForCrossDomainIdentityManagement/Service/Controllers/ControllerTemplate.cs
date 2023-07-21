@@ -23,6 +23,7 @@ namespace Microsoft.SCIM
         {
             this.monitor = monitor;
             this.provider = provider;
+            this.monitor.Request = Request;
         }
 
         protected virtual void ConfigureResponse(Resource resource)

@@ -1,5 +1,7 @@
 // Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
 
+using System.Net.Http;
+
 namespace Microsoft.SCIM
 {
     using System;
@@ -37,6 +39,8 @@ namespace Microsoft.SCIM
                     Thread.CurrentThread.ManagedThreadId);
             return result;
         }
+
+        public HttpRequestMessage Request { get; set; }
 
         public void Inform(IInformationNotification notification)
         {
