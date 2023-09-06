@@ -23,7 +23,6 @@ namespace Microsoft.SCIM
         {
             this.monitor = monitor;
             this.provider = provider;
-            this.monitor.Request = Request;
         }
 
         protected virtual void ConfigureResponse(Resource resource)
@@ -68,6 +67,7 @@ namespace Microsoft.SCIM
                 return false;
             }
 
+            this.monitor.Request = Request;
             return true;
         }
     }
