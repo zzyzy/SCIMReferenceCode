@@ -331,8 +331,8 @@ namespace Microsoft.SCIM
                 return;
             }
 
-            Address address;
-            Address addressExisting;
+            Address address = null;
+            Address addressExisting = null;
             if (user.Addresses != null)
             {
                 addressExisting =
@@ -343,7 +343,8 @@ namespace Microsoft.SCIM
                             (Address item) =>
                                 string.Equals(subAttribute.ComparisonValue, item.ItemType, StringComparison.Ordinal));
             }
-            else
+            
+            if (address == null)
             {
                 addressExisting = null;
                 address =
