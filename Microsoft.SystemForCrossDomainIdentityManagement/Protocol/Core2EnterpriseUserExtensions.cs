@@ -267,6 +267,22 @@ namespace Microsoft.SCIM
                         user.UserName = value.Value;
                     }
                     break;
+                case AttributeNames.LeaveDateTime:
+                    value = operation.Value.SingleOrDefault();
+                    DateTime? dateTimeValue = null;
+
+                    if (OperationName.Remove != operation.Name)
+                    {
+                        if (value != null && 
+                            !string.IsNullOrWhiteSpace(value.Value) &&
+                            DateTime.TryParse(value.Value, out var d))
+                        {
+                            dateTimeValue = d;
+                        }                        
+                    }
+
+                    user.LeaveDateTime = dateTimeValue;
+                    break;
             }
         }
 
