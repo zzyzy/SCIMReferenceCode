@@ -277,7 +277,13 @@ namespace Microsoft.SCIM
                             !string.IsNullOrWhiteSpace(value.Value) &&
                             DateTime.TryParse(value.Value, out var d))
                         {
-                            dateTimeValue = d;
+                            // Example:
+                            // 1. Azure AD -> 2023-10-01T16:00:00Z (utc time) -> SCIM API
+                            // 2. 2023-10-01T16:00:00Z -> DateTime.TryParse -> 2023-10-02T00:00:00Z (local time)
+                            // 3. We convert back to UTC time by calling ToUniversalTime()
+                            //
+                            // Note: The "Z" is used to denote UTC date time
+                            dateTimeValue = d.ToUniversalTime();
                         }                        
                     }
 
