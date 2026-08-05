@@ -1,0 +1,80 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net48;net10.0</TargetFrameworks>
+    <AssemblyName>Microsoft.SCIM</AssemblyName>
+    <RootNamespace>Microsoft.SCIM</RootNamespace>
+  </PropertyGroup>
+
+  <!-- Shared across both target frameworks. -->
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="Microsoft.AspNet.WebApi.Client" Version="5.2.9" />
+    <PackageReference Include="System.Configuration.ConfigurationManager" Version="10.0.0" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.14.0" />
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.14.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
+  </ItemGroup>
+
+  <!--
+    net48: the genuine System.Web.Http types plus the framework assemblies that
+    System.Web.HttpUtility and ConfigurationManager live in.
+  -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <PackageReference Include="Microsoft.AspNet.WebApi.Core" Version="5.2.9" />
+    <Reference Include="System.Web" />
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Configuration" />
+  </ItemGroup>
+
+  <!--
+    Compat/ holds the vendored System.Web.Http.HttpResponseException used on net10.0
+    in place of the discontinued Microsoft.AspNetCore.Mvc.WebApiCompatShim. On net48
+    the real type comes from System.Web.Http.dll, so the shim must not compile there.
+  -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <Compile Remove="Compat\**" />
+  </ItemGroup>
+
+  <!-- The controller layer lives in the hosting projects, one per MVC framework. -->
+  <ItemGroup>
+    <Compile Remove="Service\Controllers\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="SystemForCrossDomainIdentityManagementServiceResources.Designer.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>SystemForCrossDomainIdentityManagementServiceResources.resx</DependentUpon>
+    </Compile>
+    <Compile Update="SystemForCrossDomainIdentityManagementProtocolResources.Designer.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>SystemForCrossDomainIdentityManagementProtocolResources.resx</DependentUpon>
+    </Compile>
+    <Compile Update="SystemForCrossDomainIdentityManagementSchemasResources.Designer.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>SystemForCrossDomainIdentityManagementSchemasResources.resx</DependentUpon>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Update="SystemForCrossDomainIdentityManagementServiceResources.resx">
+      <Generator>PublicResXFileCodeGenerator</Generator>
+      <LastGenOutput>SystemForCrossDomainIdentityManagementServiceResources.Designer.cs</LastGenOutput>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Update="SystemForCrossDomainIdentityManagementProtocolResources.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>SystemForCrossDomainIdentityManagementProtocolResources.Designer.cs</LastGenOutput>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Update="SystemForCrossDomainIdentityManagementSchemasResources.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>SystemForCrossDomainIdentityManagementSchemasResources.Designer.cs</LastGenOutput>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </EmbeddedResource>
+  </ItemGroup>
+
+</Project>

@@ -3,7 +3,11 @@
 namespace Microsoft.SCIM
 {
     // Members are numerically ordered.
-    internal static class ServiceNotificationIdentifiers
+    // Public because the hosting projects (Microsoft.SCIM.AspNet, Microsoft.SCIM.AspNetCore)
+    // now live in their own assemblies and report notifications with these identifiers -
+    // MonitoringMiddleware in particular. The rest of the notification surface (IMonitor,
+    // ExceptionNotificationFactory, InformationNotificationFactory) is already public.
+    public static class ServiceNotificationIdentifiers
     {
         public const long BulkRequest2ControllerPostArgumentException = 1;
         public const long BulkRequest2ControllerPostException = 2;
@@ -49,8 +53,10 @@ namespace Microsoft.SCIM
         public const long ResourceTypesControllerGetNotImplementedException = 34;
         public const long ResourceTypesControllerGetNotSupportedException = 35;
 
-        public const long SchematizedMediaTypeFormatterReadFromStream = 36;
-        public const long SchematizedMediaTypeFormatterWroteToStream = 37;
+        // 36 and 37 were SchematizedMediaTypeFormatterReadFromStream and
+        // SchematizedMediaTypeFormatterWroteToStream. The formatter they belonged to was
+        // unreferenced and has been deleted; the numbers stay retired so that the
+        // remaining identifiers keep their existing values.
 
         public const long SchemasControllerGetArgumentException = 38;
         public const long SchemasControllerGetException = 39;

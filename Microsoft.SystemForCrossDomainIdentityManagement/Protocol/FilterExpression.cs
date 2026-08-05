@@ -656,7 +656,7 @@ namespace Microsoft.SCIM
             }
 
             string nextExpression = remainder.Substring(indexNextFilter);
-            int indexClosingBracket = remainder.IndexOf(FilterExpression.BracketClose, StringComparison.InvariantCulture);
+            int indexClosingBracket = remainder.IndexOfInvariant(FilterExpression.BracketClose);
             int nextExpressionLevel;
             int nextExpressionGroup;
             if (indexClosingBracket >= 0 && indexClosingBracket < indexLogicalOperator)
@@ -790,7 +790,7 @@ namespace Microsoft.SCIM
             }
             else
             {
-                int index = input.IndexOf(FilterExpression.Space, StringComparison.InvariantCulture);
+                int index = input.IndexOfInvariant(FilterExpression.Space);
                 if (index >= 0)
                 {
                     // If unquoted string comparison values were to be rejected,

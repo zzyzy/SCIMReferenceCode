@@ -3,6 +3,7 @@ page_type: sample
 languages:
 - csharp
 products:
+- dotnet
 - dotnetcore
 description: SCIM provisioning reference code  
 urlFragment: "update-this-to-unique-url-stub"
@@ -35,18 +36,48 @@ The reference code provided in this repository will help you get started buildin
 
 ## Getting Started
 
-The `Microsoft.SystemForCrossDomainIdentityManagement` project contains the code base for building a SCIM API. The `Microsoft.SCIM.WebHostSample` project is there as a sample for using the project. A step by step guide for starting up with the project can be found [here](https://github.com/AzureAD/SCIMReferenceCode/wiki).
+The `Microsoft.SystemForCrossDomainIdentityManagement` project (assembly `Microsoft.SCIM`) contains the code base for building a SCIM API. It multi-targets **.NET Framework 4.8** and **.NET 10.0**, and one of two hosting projects sits on top of it depending on which stack you are running:
+
+| Leg | Library TFM | Hosting project | Sample |
+|---|---|---|---|
+| ASP.NET Core Web API | `net10.0` | `Microsoft.SCIM.AspNetCore` | `Microsoft.SCIM.WebHostSample` |
+| ASP.NET Web API 2 | `net48` | `Microsoft.SCIM.AspNet` | `Microsoft.SCIM.WebHostSample.Net48` |
+
+Both legs expose identical SCIM wire behaviour - same routes, same status codes, same JSON bodies, same headers - because all request orchestration lives in the shared library (`ScimRequestHandler<T>`) and each hosting project only translates the result into its own framework's action result. `docs/scim-conformance.md` is the specification both are held to.
+
+A step by step guide for starting up with the project can be found [here](https://github.com/AzureAD/SCIMReferenceCode/wiki).
+
+### Choosing a leg
+
+Pick **net10.0 / ASP.NET Core** unless you are constrained to .NET Framework - it is the supported, actively maintained stack. Pick **net48 / ASP.NET Web API 2** if you must host inside an existing .NET Framework application or IIS site that cannot move.
+
+### Running the samples
+
+Both samples are **HTTP-only development harnesses** with an in-memory provider. Neither enables HTTPS; see `docs/net48-hosting.md`.
+
+```bash
+# net10.0 - listens on http://localhost:5000
+dotnet run --project Microsoft.SCIM.WebHostSample
+
+# net48 - OWIN self-host, Windows only, listens on http://localhost:5000
+#         (pass a URL as the first argument, or set SCIM_SAMPLE_URL, to change it)
+dotnet run --project Microsoft.SCIM.WebHostSample.Net48
+```
+
+Both read `ASPNETCORE_ENVIRONMENT` and layer `appsettings.{environment}.json` over `appsettings.json`. Set it to `Development` for the local dev-token flow. Building the net48 projects requires Windows.
 
 ## Navigating the reference code
 
-This reference code was developed as a .Net core MVC web API for SCIM provisioning. The three main folders are Schemas, Controllers, and Protocol.
+This reference code implements SCIM provisioning as a web API on two hosting stacks: ASP.NET Core MVC (net10.0) and ASP.NET Web API 2 (net48). The SCIM protocol and schema logic is shared; only the controller layer is per-stack. Inside `Microsoft.SystemForCrossDomainIdentityManagement` the three main folders are Schemas, Service, and Protocol.
 
 1. The **Schemas** folder includes:
     * The models for the User and Group resources along with some abstract classes like Schematized for shared functionality.
     * An Attributes folder which contains the class definitions for complex attributes of Users and Groups such as addresses.
 2. The **Service** folder contains logic for actions relating to the way resources are queried and updated.
     * The reference code has services to return users and groups.
-    * The **controllers** folder contains the various SCIM endpoints. Resource controllers include HTTP verbs to perform CRUD operations on the resource (GET, POST, PUT, PATCH, DELETE). Controllers rely on services to perform the actions.
+    * `ScimRequestHandler<T>` and `ScimDiscoveryRequestHandler` hold all SCIM request orchestration - argument validation, provider calls, exception-to-status mapping and monitor reporting - and return a hosting-neutral `ScimResult`. This is what keeps the two hosting legs behaving identically.
+    * `Compat/WebApiCompat.cs` vendors `System.Web.Http.HttpResponseException` for the net10.0 leg only; on net48 the real type comes from `System.Web.Http.dll`. See `docs/net48-hosting.md`.
+    * The **controllers** live in the hosting projects, not here: `Microsoft.SCIM.AspNetCore/Controllers` and `Microsoft.SCIM.AspNet/Controllers`. Resource controllers expose the HTTP verbs for CRUD on a resource (GET, POST, PUT, PATCH, DELETE) and delegate straight to the shared handlers.
 3. The **Protocol** folder contains logic for actions relating to the way resources are returned according to the SCIM RFC such as:
     * Returning multiple resources as a list.
     * Returning only specific resources based on a filter.
@@ -58,8 +89,13 @@ This reference code was developed as a .Net core MVC web API for SCIM provisioni
 
 | File/folder       | Description                                |
 |-------------------|--------------------------------------------|
-| `Microsoft.SystemForCrossDomainIdentityManagement`| Sample source code.|
-| `Microsoft.SCIM.WebHostSample`| Sample implementation of the SCIM library.|
+| `Microsoft.SystemForCrossDomainIdentityManagement`| The SCIM library (assembly `Microsoft.SCIM`), multi-targeting `net48` and `net10.0`.|
+| `Microsoft.SCIM.AspNetCore`| ASP.NET Core Web API hosting layer for the library (`net10.0`).|
+| `Microsoft.SCIM.AspNet`| ASP.NET Web API 2 hosting layer for the library (`net48`).|
+| `Microsoft.SCIM.WebHostSample`| Sample implementation on ASP.NET Core (`net10.0`).|
+| `Microsoft.SCIM.WebHostSample.Net48`| Sample implementation on ASP.NET Web API 2, OWIN self-hosted (`net48`).|
+| `docs/scim-conformance.md`| The RFC-derived specification both hosting legs are verified against.|
+| `docs/net48-hosting.md`| Hosting the library on .NET Framework: TLS, IIS, signing, the compat shim.|
 | `.gitignore`      | Define what to ignore at commit time.      |
 | `CHANGELOG.md`    | List of changes to the sample.             |
 | `CONTRIBUTING.md` | Guidelines for contributing to the sample. |
@@ -74,7 +110,11 @@ The SCIM standard leaves authentication and authorization relatively open. You c
 > These authorization methods provided by this repo are solely for testing. When integrating with Azure AD, review the authorization guidance provided [here](https://docs.microsoft.com/azure/active-directory/app-provisioning/use-scim-to-provision-users-and-groups#authorization-for-provisioning-connectors-in-the-application-gallery). 
 
 > **⚠️ [DO NOT USE IN PRODUCTION]**
-> The `TokenController` in `Microsoft.SCIM.WebHostSample` is an anonymously reachable JWT issuer intended only for local sample/integration-test flows. The dev-mode `TokenValidationParameters` in `Startup.cs.ConfigureJwtBearerOptons` disables every JWT validation check (issuer, audience, lifetime, signing key) and is guarded by `#if DEBUG` so Release builds physically cannot ship the bypass. **Before deploying any SCIM endpoint derived from this sample to a non-sample environment, delete `TokenController` and the dev-mode branch, and replace them with a properly authenticated, audience-scoped OAuth token issuer.**
+> **This applies to both samples.** `TokenController` in `Microsoft.SCIM.WebHostSample` and its counterpart in `Microsoft.SCIM.WebHostSample.Net48` are anonymously reachable JWT issuers intended only for local sample/integration-test flows, signed with a symmetric key committed to this repository. The dev-mode `TokenValidationParameters` - in `Program.cs.ConfigureJwtBearerOptons` on the net10.0 sample and in `Startup.cs.ConfigureAuthentication` on the net48 sample - disable every JWT validation check (issuer, audience, lifetime, signing key), and both are guarded by `#if DEBUG` so Release builds physically cannot ship the bypass. Both samples print a DEV-ONLY banner at startup saying so.
+>
+> **Neither sample enables HTTPS.** They are HTTP-only development harnesses, deliberately, so the two hosting legs can be compared like-for-like. TLS is the host's responsibility - see `docs/net48-hosting.md`.
+>
+> **Before deploying any SCIM endpoint derived from either sample to a non-sample environment**, delete the token controller and the dev-mode branch, replace them with a properly authenticated, audience-scoped OAuth token issuer, and terminate TLS.
 
 
 ## Contributing to the reference code

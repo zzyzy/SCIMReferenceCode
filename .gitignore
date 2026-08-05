@@ -332,3 +332,9 @@ ASALocalRun/
 # log files
 Log/
 *.txt
+
+# The net10.0 sample's launch profile is checked in deliberately. The port removed
+# UseHttpsRedirection() from the sample (both samples are HTTP-only dev harnesses), so the
+# explicit http://localhost:5000 URL here is part of the documented run instructions rather
+# than a developer's local preference. See docs/net48-hosting.md and README.md.
+!Microsoft.SCIM.WebHostSample/Properties/launchSettings.json

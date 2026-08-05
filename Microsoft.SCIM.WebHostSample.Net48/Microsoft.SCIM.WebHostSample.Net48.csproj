@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>Microsoft.SCIM.WebHostSample.Net48</AssemblyName>
+    <RootNamespace>Microsoft.SCIM.WebHostSample</RootNamespace>
+    <!--
+      Microsoft.Owin.Security.Jwt 4.2.2 was built against System.IdentityModel.Tokens.Jwt 5.x
+      and NuGet unifies the whole graph on 8.x. Letting the SDK generate the binding redirects
+      is what makes that unification actually load at runtime. See MULTI-TARGET-PLAN.md D19/R6.
+    -->
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNet.WebApi.OwinSelfHost" Version="5.2.9" />
+    <!-- IAppBuilder. Transitive, but referenced directly because Startup.cs names it. -->
+    <PackageReference Include="Owin" Version="1.0.0" />
+    <PackageReference Include="Microsoft.Owin.Security.Jwt" Version="4.2.2" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Microsoft.SCIM.AspNet\Microsoft.SCIM.AspNet.csproj" />
+  </ItemGroup>
+
+  <!--
+    The provider, the sample schema resources, the startup banner and the configuration files
+    are single-sourced from the net10.0 sample rather than copied, so the two samples cannot
+    drift apart. See MULTI-TARGET-PLAN.md D6.
+  -->
+  <ItemGroup>
+    <Compile Include="..\Microsoft.SCIM.WebHostSample\Provider\**\*.cs" Link="Provider\%(Filename)%(Extension)" />
+    <Compile Include="..\Microsoft.SCIM.WebHostSample\Resources\**\*.cs" Link="Resources\%(Filename)%(Extension)" />
+    <Compile Include="..\Microsoft.SCIM.WebHostSample\SampleStartupBanner.cs" Link="SampleStartupBanner.cs" />
+    <None Include="..\Microsoft.SCIM.WebHostSample\appsettings*.json" Link="%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

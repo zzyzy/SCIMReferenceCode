@@ -184,7 +184,7 @@ namespace Microsoft.SCIM
                 buffer.SchemaIdentifier = schemaIdentifier;
             }
 
-            int seperatorIndex = expression.IndexOf(Path.SeperatorAttributes, StringComparison.InvariantCulture);
+            int seperatorIndex = expression.IndexOfInvariant(Path.SeperatorAttributes);
             if (seperatorIndex >= 0)
             {
                 string valuePathExpression = expression.Substring(seperatorIndex + 1);
