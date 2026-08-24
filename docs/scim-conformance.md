@@ -90,6 +90,8 @@ and once against `scim/Groups` with `Core2Group` payloads.
 | U39 | `PATCH` carrying an unrecognised `op` verb | **400** | — | `Core2Error` | RFC 7644 §3.5.2 — **parity fix, see §5 item 17** |
 | U40 | `POST` a body repeating a schema URN | **201** | — | `schemas` lists it once | RFC 7643 §3 — **fixed, see §5 item 17** |
 | U41 | Concurrent `POST` of one `userName` | **201** once, **409** for the rest | — | one resource in the store | RFC 7643 §4.1.1 — **fixed, see §5 item 18** |
+| U42 | `GET ?count=abc` or `?startIndex=xyz` | **400** | — | `Core2Error` | RFC 7644 §3.4.2.4 — **fixed, see §5 item 19** |
+| U43 | `HEAD` on any SCIM route | **405** | — | empty | **parity fix, see §5 item 19** |
 
 > **Note on U31-U33.** All three previously answered success while doing nothing. U31 meant a
 > full Group membership sync silently applied no change; U32 meant no attribute could be removed
@@ -299,6 +301,15 @@ against the `netcoreapp3.1` build should expect exactly these differences and no
     single lock published by `InMemoryStorage` - one for both collections, because a group's
     members reference users and two locks would invite lock-order inversion. This was the
     sample, not the library, but the sample is what integrators copy.
+19. **A non-numeric page parameter is 400, and `HEAD` is 405 on both legs** (rows U42, U43).
+    `ResourceQuery` called `int.Parse` on the raw `count` / `startIndex` value, and the
+    `FormatException` that follows is caught nowhere, so `?count=abc` answered 500; it now
+    throws the `ArgumentException` the query handler already maps to 400. Separately, Web API
+    matches `HEAD` against `GET` actions, so on net48 the action ran, produced a body, and the
+    OWIN adapter failed writing it - leaving the caller with a closed socket and no HTTP
+    response at all, which a health-check probe reads as the service being down. ASP.NET Core
+    does not route `HEAD` to `GET` and already answered 405, so a message handler on the net48
+    leg now does the same. RFC 7644 defines no `HEAD` semantics.
 
 ---
 

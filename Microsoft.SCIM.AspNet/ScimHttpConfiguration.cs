@@ -3,8 +3,12 @@
 namespace Microsoft.SCIM
 {
     using System;
+    using System.Net;
+    using System.Net.Http;
     using System.Net.Http.Formatting;
     using System.Net.Http.Headers;
+    using System.Threading;
+    using System.Threading.Tasks;
     using System.Web.Http;
     using System.Web.Http.Dispatcher;
     using Newtonsoft.Json;
@@ -131,7 +135,35 @@ namespace Microsoft.SCIM
 
             configuration.Filters.Add(new ScimExceptionFilterAttribute());
 
+            configuration.MessageHandlers.Insert(0, new ScimHeadRequestHandler());
+
             return configuration;
+        }
+    }
+
+    /// <summary>
+    /// Answers HEAD with 405, rather than letting Web API dispatch it to a GET action.
+    /// </summary>
+    /// <remarks>
+    /// Web API matches HEAD against GET actions, so the action runs and produces a body that
+    /// must then not be written. The OWIN adapter's attempt to write it anyway ends in a
+    /// cancelled task and a closed socket, so the caller sees a connection reset rather than any
+    /// HTTP response at all - a health-check probe reads that as the service being down. ASP.NET
+    /// Core does not route HEAD to GET actions and answers 405, which is also what SCIM needs:
+    /// RFC 7644 defines no HEAD semantics, and both legs must answer identically.
+    /// </remarks>
+    internal sealed class ScimHeadRequestHandler : DelegatingHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            if (null != request && HttpMethod.Head == request.Method)
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.MethodNotAllowed));
+            }
+
+            return base.SendAsync(request, cancellationToken);
         }
     }
 }

@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
+﻿// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
 
 namespace Microsoft.SCIM
 {
@@ -155,7 +155,19 @@ namespace Microsoft.SCIM
                 return;
             }
 
-            int parsedValue = int.Parse(value, CultureInfo.InvariantCulture);
+            // int.Parse threw FormatException on a non-numeric count or startIndex, which no
+            // handler catches, so "?count=abc" answered 500. RFC 7644 section 3.4.2.4 defines
+            // both as integers; anything else is a malformed request, and ArgumentException is
+            // what the query handler turns into 400.
+            if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsedValue))
+            {
+                throw new ArgumentException(
+                    string.Format(
+                        CultureInfo.InvariantCulture,
+                        SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidOperationTemplate,
+                        value));
+            }
+
             if (null == this.PaginationParameters)
             {
                 this.PaginationParameters = new PaginationParameters();
