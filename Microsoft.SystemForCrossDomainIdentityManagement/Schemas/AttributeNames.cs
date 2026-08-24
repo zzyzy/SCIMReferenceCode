@@ -30,7 +30,9 @@ namespace Microsoft.SCIM
         public const string ElectronicMailAddresses = "emails";
         public const string EmployeeNumber = "employeeNumber";
         public const string Endpoint = "endpoint";
-        public const string EntityTag = "eTag";
+        // "etag", not "eTag": RFC 7643 section 5 names this member in lower case, and a client
+        // reading /ServiceProviderConfig for it found nothing under the old spelling.
+        public const string EntityTag = "etag";
         public const string Expiry = "exp";
         public const string ExtensionEnterpriseUser2 = SchemaIdentifiers.Core2EnterpriseUser;
         public const string ExternalIdentifier = "externalId";

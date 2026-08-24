@@ -614,6 +614,23 @@ namespace Microsoft.SCIM
                     throw new HttpResponseException(HttpStatusCode.InternalServerError);
                 }
 
+                // RFC 7644 section 3.5.1: the request URI identifies the resource. id is
+                // read-only, so a client may legitimately omit it from the body - and did,
+                // which left the provider with an unidentified resource and turned a replace
+                // of something that does not exist into 400 rather than 404. A body that
+                // names a different resource is a different matter, and is refused.
+                if (
+                       !string.IsNullOrWhiteSpace(resource.Identifier)
+                    && !string.Equals(resource.Identifier, identifier, StringComparison.OrdinalIgnoreCase))
+                {
+                    return ScimResult.Error(
+                        HttpStatusCode.BadRequest,
+                        SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidIdentifier,
+                        ScimTypes.Mutability);
+                }
+
+                resource.Identifier = identifier;
+
                 IProviderAdapter<T> provider = this.AdaptProvider();
                 Resource result = await provider.Replace(request, resource, correlationIdentifier).ConfigureAwait(false);
 
@@ -661,7 +678,12 @@ namespace Microsoft.SCIM
                 else if (httpResponseException.Response.StatusCode == HttpStatusCode.Conflict)
                     return ScimResult.Error(HttpStatusCode.Conflict, SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidRequest);
                 else
-                    return ScimResult.Error(HttpStatusCode.BadRequest, httpResponseException.Message);
+                    // Not the exception's Message: an HttpResponseException thrown for its
+                    // status alone carries "Exception of type '...' was thrown.", which was
+                    // being handed to the caller as the error detail.
+                    return ScimResult.Error(
+                        HttpStatusCode.BadRequest,
+                        SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidRequest);
             }
             catch (Exception exception)
             {

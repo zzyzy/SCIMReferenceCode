@@ -316,6 +316,12 @@ namespace Microsoft.SCIM
                     case ComparisonOperatorValue.ew:
                         this.filterOperator = ComparisonOperator.EndsWith;
                         break;
+                    case ComparisonOperatorValue.co:
+                        this.filterOperator = ComparisonOperator.Contains;
+                        break;
+                    case ComparisonOperatorValue.sw:
+                        this.filterOperator = ComparisonOperator.StartsWith;
+                        break;
                     case ComparisonOperatorValue.eq:
                         this.filterOperator = ComparisonOperator.Equals;
                         break;
@@ -350,7 +356,10 @@ namespace Microsoft.SCIM
                         this.filterOperator = ComparisonOperator.NotMatchesExpression;
                         break;
                     default:
-                        string notSupported = Enum.GetName(typeof(ComparisonOperatorValue), this.Operator);
+                        // 'value', not 'this.Operator': the latter is this property's own
+                        // getter, which still holds the previous value - zero, and so
+                        // "bitAnd" - so every unmapped operator was reported as that one.
+                        string notSupported = Enum.GetName(typeof(ComparisonOperatorValue), value);
                         throw new NotSupportedException(notSupported);
                 }
                 this.comparisonOperator = value;

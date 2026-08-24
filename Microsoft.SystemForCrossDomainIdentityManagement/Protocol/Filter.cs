@@ -203,6 +203,12 @@ namespace Microsoft.SCIM
                 case ComparisonOperator.EndsWith:
                     operatorValue = ComparisonOperatorValue.ew;
                     break;
+                case ComparisonOperator.Contains:
+                    operatorValue = ComparisonOperatorValue.co;
+                    break;
+                case ComparisonOperator.StartsWith:
+                    operatorValue = ComparisonOperatorValue.sw;
+                    break;
                 case ComparisonOperator.Equals:
                     operatorValue = ComparisonOperatorValue.eq;
                     break;

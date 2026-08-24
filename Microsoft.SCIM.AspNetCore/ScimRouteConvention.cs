@@ -51,6 +51,8 @@ namespace Microsoft.SCIM
                         ScimPath.ApplyPrefix(selector.AttributeRouteModel.Template);
                 }
 
+                bool isServiceRoot = typeof(RootController) == controller.ControllerType;
+
                 foreach (ActionModel action in controller.Actions)
                 {
                     foreach (SelectorModel selector in action.Selectors)
@@ -60,11 +62,54 @@ namespace Microsoft.SCIM
                             continue;
                         }
 
-                        selector.AttributeRouteModel.Template =
-                            ScimPath.ApplyPrefix(selector.AttributeRouteModel.Template);
+                        string template = selector.AttributeRouteModel.Template;
+
+                        if (isServiceRoot)
+                        {
+                            template = ScimRouteConvention.ExcludeCollectionSegments(template);
+                        }
+
+                        selector.AttributeRouteModel.Template = ScimPath.ApplyPrefix(template);
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// Constrains the service root's identifier parameter so that it cannot match a
+        /// collection segment.
+        /// </summary>
+        /// <remarks>
+        /// The service root routes at the prefix itself, so its <c>{identifier}</c> template is
+        /// <c>scim/{identifier}</c> - the same shape as <c>scim/Users</c>. For a verb the Users
+        /// controller does define, the literal wins and nothing is amiss. For one it does not,
+        /// the parameterised route was the only candidate left, so <c>PUT scim/Users</c> reached
+        /// the service root as a resource named "Users" and answered 400 or 415 where net48,
+        /// whose routing stops at the matched controller, answered 405. Excluding the segments
+        /// makes both legs answer 405 and stops a collection URI being read as an identifier.
+        /// </remarks>
+        private static string ExcludeCollectionSegments(string template)
+        {
+            const string Parameter = "{identifier}";
+
+            if (!template.Contains(Parameter))
+            {
+                return template;
+            }
+
+            string reserved =
+                string.Join(
+                    "|",
+                    ProtocolConstants.PathUsers,
+                    ProtocolConstants.PathGroups,
+                    ProtocolConstants.PathBulk,
+                    ServiceConstants.PathSegmentSchemas,
+                    ServiceConstants.PathSegmentResourceTypes,
+                    ServiceConstants.PathSegmentServiceProviderConfiguration);
+
+            return template.Replace(
+                Parameter,
+                "{identifier:regex(^(?!(?i:" + reserved + ")$).*$)}");
         }
     }
 }

@@ -82,6 +82,11 @@ and once against `scim/Groups` with `Core2Group` payloads.
 | U32 | `PATCH` remove with `path` and no `value`, singular attribute | **204** / **200** per U17/U18 | — | the named attribute cleared | RFC 7644 §3.5.2.2 — **fixed, see §5 item 12** |
 | U32a | `PATCH` remove with `path` and no `value`, a multi-valued sub-path such as `emails[type eq "work"].value` | **204** / **200** per U17/U18 | — | that entry removed, the others retained | RFC 7644 §3.5.2.2 — **fixed, see §5 item 12** |
 | U33 | `PATCH` a path the resource type does not model | **400** | — | `Core2Error` with `scimType` `invalidPath` | RFC 7644 §3.5.2, §3.12 — **behaviour change, see §5 item 13** |
+| U34 | `GET ?filter=<attr> co "<value>"` and `sw` | **200** | — | `ListResponse` of matching resources | RFC 7644 §3.4.2.2 — **fixed, see §5 item 14** |
+| U35 | `PUT /{unknown-id}` with no `id` in the body | **404** | — | `Core2Error` naming the identifier | RFC 7644 §3.5.1 — **fixed, see §5 item 15** |
+| U36 | `PUT /{id}` whose body `id` names a different resource | **400** | — | `Core2Error` with `scimType` `mutability` | RFC 7644 §3.5.1, §3.12 |
+| U37 | `PUT` / `PATCH` / `DELETE` on a collection URI (`scim/Users`) | **405** | — | — | **parity fix, see §5 item 16** |
+| U38 | `GET scim/ServiceProviderConfig` | **200** | — | includes `etag`, spelled in lower case | RFC 7643 §5 — **fixed, see §5 item 14** |
 
 > **Note on U31-U33.** All three previously answered success while doing nothing. U31 meant a
 > full Group membership sync silently applied no change; U32 meant no attribute could be removed
@@ -253,6 +258,28 @@ against the `netcoreapp3.1` build should expect exactly these differences and no
     gained a virtual `TryPatchExtensionAttribute` so that a derived type carrying a schema
     extension can claim its own paths before the core patcher rejects them; a type that does not
     override it will see 400 on every PATCH against its extension.
+14. **`co` and `sw` now work, and `etag` is spelled as the RFC spells it** (rows U34, U38).
+    `FilterExpression`'s regex parsed both operators, but its mapping had no case for either and
+    `ComparisonOperator` had no `Contains` or `StartsWith` member to map them to, so a filter
+    using them threw. Worse, the `default` branch that reported the failure read `this.Operator`
+    - the property's own getter, holding the previous value, which defaults to zero and so to
+    `bitAnd` - instead of the incoming `value`, so every unmapped operator was reported as
+    `bitAnd`. That is why the gap went unnoticed. The two enum members are appended rather than
+    inserted, because the values are ordinal. Separately, `ServiceProviderConfig` emitted its
+    entity-tag feature as `eTag`; RFC 7643 §5 spells it `etag`, so a client looking for it found
+    nothing.
+15. **`PUT` to an unknown identifier answers 404 whether or not the body carries `id`** (rows
+    U35, U36). `id` is read-only, so a client may legitimately omit it - and then the provider
+    received an unidentified resource and answered 400 before it could look anything up. The
+    request URI is authoritative per RFC 7644 §3.5.1, so the handler now sets the identifier from
+    the route, and refuses a body that names a *different* resource with `scimType` `mutability`.
+    The 400 body also no longer hands back `"Exception of type '...' was thrown."` as its detail.
+16. **A collection URI answers 405 to `PUT`, `PATCH` and `DELETE` on both legs** (row U37). The
+    service root routes at the prefix, so its `{identifier}` template has the same shape as
+    `scim/Users`. For a verb the Users controller does not define, the parameterised route was
+    the last candidate standing on ASP.NET Core, so `PUT scim/Users` reached the service root as
+    a resource named "Users" and answered 415 or 400 where net48 answered 405. The service
+    root's identifier is now constrained so that it cannot match a collection segment.
 
 ---
 

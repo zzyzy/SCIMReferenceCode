@@ -129,16 +129,28 @@ namespace Microsoft.SCIM.WebHostSample.Provider
                         // UserName filter
                         else if (andFilter.AttributePath.Equals(AttributeNames.UserName, StringComparison.OrdinalIgnoreCase))
                         {
-                            if (andFilter.FilterOperator != ComparisonOperator.Equals)
-                            {
-                                throw new NotSupportedException(
-                                    string.Format(SystemForCrossDomainIdentityManagementServiceResources.ExceptionFilterOperatorNotSupportedTemplate, andFilter.FilterOperator));
-                            }
-
                             string userName = andFilter.ComparisonValue;
-                            predicateAnd = predicateAnd.And(p => string.Equals(p.UserName, userName, StringComparison.OrdinalIgnoreCase));
 
-                           
+                            // eq, co and sw. Entra ID looks a user up by userName before
+                            // deciding whether to create them, and uses all three.
+                            switch (andFilter.FilterOperator)
+                            {
+                                case ComparisonOperator.Equals:
+                                    predicateAnd = predicateAnd.And(p => string.Equals(p.UserName, userName, StringComparison.OrdinalIgnoreCase));
+                                    break;
+
+                                case ComparisonOperator.Contains:
+                                    predicateAnd = predicateAnd.And(p => p.UserName != null && p.UserName.IndexOf(userName, StringComparison.OrdinalIgnoreCase) >= 0);
+                                    break;
+
+                                case ComparisonOperator.StartsWith:
+                                    predicateAnd = predicateAnd.And(p => p.UserName != null && p.UserName.StartsWith(userName, StringComparison.OrdinalIgnoreCase));
+                                    break;
+
+                                default:
+                                    throw new NotSupportedException(
+                                        string.Format(SystemForCrossDomainIdentityManagementServiceResources.ExceptionFilterOperatorNotSupportedTemplate, andFilter.FilterOperator));
+                            }
                         }
 
                         // ExternalId filter
