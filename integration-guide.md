@@ -119,7 +119,7 @@ This keeps every change the SCIM layer makes away from your existing controllers
 OWIN, via the [`Microsoft.Owin.Host.SystemWeb`](https://www.nuget.org/packages/microsoft.owin.host.systemweb/)
 and `Microsoft.AspNet.WebApi.Owin` packages.
 
-`Microsoft.SCIM.WebHostSample.Iis` in this repository is a complete working example of
+`Microsoft.SCIM.WebHostSample.IIS` in this repository is a complete working example of
 everything in this section — an application with its own `api/inventory` endpoint that gains
 SCIM without a single edit to `Global.asax`.
 
@@ -258,7 +258,7 @@ If step 3 returns 500, your provider threw something that is not an
 `HttpResponseException`. If steps 6 and 7 return 405, revisit step 5.
 
 `PostmanCollection.json` in this repository exercises the full surface, and
-`Microsoft.SCIM.WebHostSample.Iis` passes all of the checks above under IIS Express.
+`Microsoft.SCIM.WebHostSample.IIS` passes all of the checks above under IIS Express.
 
 ## Common problems
 

@@ -15,7 +15,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Microsoft.SCIM.AspNetCore",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Microsoft.SCIM.WebHostSample.Net48", "Microsoft.SCIM.WebHostSample.Net48\Microsoft.SCIM.WebHostSample.Net48.csproj", "{375EA2B3-DD5D-4EAA-B87D-55AC7CB8E01F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Microsoft.SCIM.WebHostSample.Iis", "Microsoft.SCIM.WebHostSample.Iis\Microsoft.SCIM.WebHostSample.Iis.csproj", "{7915A367-677C-4C15-9F7B-D534CEB335E9}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Microsoft.SCIM.WebHostSample.IIS", "Microsoft.SCIM.WebHostSample.IIS\Microsoft.SCIM.WebHostSample.IIS.csproj", "{7915A367-677C-4C15-9F7B-D534CEB335E9}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

@@ -2,7 +2,7 @@
 // Copyright (c) Microsoft Corporation.  All rights reserved.
 //------------------------------------------------------------
 
-namespace Microsoft.SCIM.WebHostSample.Iis
+namespace Microsoft.SCIM.WebHostSample.IIS
 {
     using System.Web;
     using System.Web.Http;

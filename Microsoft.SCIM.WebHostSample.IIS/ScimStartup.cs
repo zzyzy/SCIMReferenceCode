@@ -2,9 +2,9 @@
 // Copyright (c) Microsoft Corporation.  All rights reserved.
 //------------------------------------------------------------
 
-[assembly: Microsoft.Owin.OwinStartup(typeof(Microsoft.SCIM.WebHostSample.Iis.ScimStartup))]
+[assembly: Microsoft.Owin.OwinStartup(typeof(Microsoft.SCIM.WebHostSample.IIS.ScimStartup))]
 
-namespace Microsoft.SCIM.WebHostSample.Iis
+namespace Microsoft.SCIM.WebHostSample.IIS
 {
     using System;
     using System.IO;

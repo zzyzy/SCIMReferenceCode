@@ -11,8 +11,8 @@
   <PropertyGroup>
     <TargetFramework>net48</TargetFramework>
     <OutputType>Library</OutputType>
-    <AssemblyName>Microsoft.SCIM.WebHostSample.Iis</AssemblyName>
-    <RootNamespace>Microsoft.SCIM.WebHostSample.Iis</RootNamespace>
+    <AssemblyName>Microsoft.SCIM.WebHostSample.IIS</AssemblyName>
+    <RootNamespace>Microsoft.SCIM.WebHostSample.IIS</RootNamespace>
 
     <!--
       IIS expects an application folder containing Web.config and bin\*.dll. The SDK's default
