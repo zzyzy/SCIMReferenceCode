@@ -93,7 +93,10 @@ Both work. Pick by whether you know the schema at compile time.
 
 `SchematizedJsonConverter` is registered in both legs' Newtonsoft settings and makes
 `Core2UserBase.CustomExtension` round-trip: an extension namespace the service was never
-compiled against survives a POST and comes back on a GET. It does not go through
+compiled against survives a POST and comes back on a GET. **Only under
+`urn:ietf:params:scim:schemas:extension:`** — the converter captures a property as an extension
+by that prefix, so a vendor URN in some other namespace is dropped without complaint. It does
+not go through
 `ToJson()` — that method exists and works, but it runs `DataContractJsonSerializer` into a
 stream and re-parses the result, so making it the response path would add a
 serialize-then-reparse round trip to every response and leave two serializers to keep aligned.
@@ -109,7 +112,43 @@ follows the type rather than being written by hand. The dictionary is weakly typ
 captured into the dictionary; on write, the dictionary never overwrites a typed member. So an
 `EduPassUser` carrying both its own extension and some unrelated one emits each exactly once.
 `ResourceCloner` carries the converter too, so an atomic PATCH does not silently strip an
-untyped extension.
+untyped extension — which is the reason to clone with `ResourceCloner.Clone` rather than a
+hand-rolled JSON round trip.
+
+### PATCH against your extension
+
+A PATCH path the core patcher cannot place is rejected with 400 `invalidPath`. It knows nothing
+of your schema, so **a derived user type must claim its own attributes or every PATCH against
+them fails.** Override the hook:
+
+```csharp
+protected override bool TryPatchExtensionAttribute(PatchOperation2 operation)
+{
+    if (!EduPassSchemaIdentifiers.UserExtension.Equals(
+            operation?.Path?.SchemaIdentifier, StringComparison.OrdinalIgnoreCase))
+    {
+        return false;       // not ours - let the core reject it
+    }
+
+    string value = OperationName.Remove == operation.Name
+        ? null
+        : operation.Value?.SingleOrDefault()?.Value;
+
+    switch (operation.Path.AttributePath)
+    {
+        case EduPassAttributeNames.SchoolOrHq:
+            this.EduPassExtension.SchoolOrHq = value;
+            return true;
+        // ... one case per attribute
+        default:
+            return false;   // an attribute we do not model is still an error
+    }
+}
+```
+
+`EduPassUser` does this already. Returning false is not "ignore" — it is "I cannot place this",
+and the caller gets a 400 saying so. That is deliberate: an operation that cannot fail cannot
+fail its request either, and the specification requires a multi-operation PATCH to be atomic.
 
 ### Replacing the `/Users` controller
 
@@ -149,7 +188,11 @@ and a custom one.
 
 ## 3. Your provider
 
-`ProviderBase` is unchanged in shape. Four things are yours to get right:
+`InMemoryEduPassProvider` in `SCIM.EduPass/Provider` is a complete worked example of everything
+below, and is what the conformance runs execute against. It holds state in memory and is not a
+production store, but the obligations it discharges are the ones your provider inherits.
+
+`ProviderBase` is unchanged in shape. These are yours to get right:
 
 **Return `EduPassUser` instances.** `IProvider` is typed in terms of `Resource`, so the runtime
 subtype has to be preserved through create, retrieve, query and replace.
@@ -186,6 +229,26 @@ resourceTypes.Add(EduPassTypeSchemes.CreateUserResourceType());
 Pass `includeUinFin: false` if you do not store UIN/FIN — that is how the specification says to
 opt out, and Edupass will stop sending it.
 
+### Keep users and groups consistent
+
+Four obligations follow from the fact that only you know how the two relate. None of them can
+live in the shared library, and all four are easy to miss because nothing fails loudly:
+
+- **Deleting a Group removes the application role from everyone who held it.** The specification
+  says so explicitly. A store that deletes only the group row leaves its members holding a role
+  that no longer exists.
+- **Deleting a User removes them from every group that listed them.** Otherwise `members` keeps
+  handing Edupass an identifier that resolves to nothing.
+- **A membership naming an unknown user is refused**, not stored. Accepting it means returning a
+  dangling reference on the next read.
+- **A duplicate Group `displayName` is a 409.** `displayName` *is* the application role.
+
+The cheapest way to get the first three right is not to enforce them at all: hold membership in
+one place — on the group — and derive the user's `groups` from it on read. Then they cannot
+disagree, and deleting either side is the removal. That is what `InMemoryEduPassProvider` does,
+and why its `groups` projection and its delete paths are three lines each rather than
+bookkeeping you have to remember at every write.
+
 ### PATCH must be atomic
 
 RFC 7644 §3.5.2 and the Edupass Update Group Membership section both require all-or-nothing.
@@ -195,8 +258,13 @@ on success:
 ```csharp
 Core2Group candidate = ResourceCloner.Clone(group);
 candidate.Apply(patchRequest);
+this.RequireResolvableMembers(candidate);   // validate the candidate, not the stored resource
 this.store[identifier] = candidate;
 ```
+
+Validate the *candidate*. Applying to the stored resource and validating afterwards leaves a
+rejected request's changes in place — the caller gets a 400 and the write lands anyway, which is
+the exact opposite of what atomicity means.
 
 A provider over a real database should use a transaction instead.
 
@@ -250,8 +318,19 @@ filtering rule or a gateway is usually simpler than middleware.
 **TLS 1.2.** Both samples are HTTP-only development harnesses by design. TLS is the host's
 concern — see `docs/net48-hosting.md`.
 
-**Verification.** The solution builds clean on both target frameworks, but none of this has been
-exercised against a live Edupass endpoint, and there are no automated tests in this repository.
+**Verification.** The 25-row Edupass test plan has been executed end to end against three hosts —
+the net10.0 sample, the net48 sample, and `InMemoryEduPassProvider` — with identical status codes
+on all three. See the `Test Execution` and `Provider Obligations` sheets in `test-plan.xlsx` for
+the request and response captured for every row. That run is what surfaced the three PATCH
+defects now fixed (`docs/scim-conformance.md` §5 items 12 and 13).
+
+Two limits on what that proves. **The harnesses are not in this repository** — they are scripts
+run against a live host, so nothing re-checks these behaviours when the code next changes; the
+`replace`-on-`members` defect survived this long precisely because nothing was watching. And
+**none of it has touched a live Edupass endpoint.** Every FIMS-internal expectation in the plan —
+UPA creation, user-admin approval, position tables, notifications — has no counterpart here and
+was not exercised.
+
 Before onboarding, at minimum: run the two Postman collections against both legs, confirm a real
 Edupass token validates (and that a rotated `kid` is picked up), and check the `/Schemas` and
 `/ResourceTypes` payloads against what Edupass expects. `docs/scim-conformance.md` is the row-by-

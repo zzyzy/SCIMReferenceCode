@@ -9,7 +9,6 @@ namespace Scim.EduPass
     using System.Threading.Tasks;
     using System.Web.Http;
     using Microsoft.SCIM;
-    using Newtonsoft.Json;
 
     /// <summary>
     /// An in-memory <see cref="IProvider"/> over <see cref="EduPassUser"/> and
@@ -360,7 +359,7 @@ namespace Scim.EduPass
                         throw new HttpResponseException(HttpStatusCode.NotFound);
                     }
 
-                    EduPassUser patchedUser = InMemoryEduPassProvider.Copy(user);
+                    EduPassUser patchedUser = ResourceCloner.Clone(user);
                     patchedUser.Apply(request);
                     EduPassValidator.Validate(patchedUser, this.requireUinFin);
 
@@ -376,7 +375,7 @@ namespace Scim.EduPass
                     throw new HttpResponseException(HttpStatusCode.NotFound);
                 }
 
-                Core2Group patchedGroup = InMemoryEduPassProvider.Copy(group);
+                Core2Group patchedGroup = ResourceCloner.Clone(group);
                 patchedGroup.Apply(request);
                 InMemoryEduPassProvider.RequireDisplayName(patchedGroup);
                 this.RequireResolvableMembers(patchedGroup);
@@ -467,21 +466,6 @@ namespace Scim.EduPass
         private bool IsUserRequest(string schemaIdentifier)
         {
             return !SchemaIdentifiers.Core2Group.Equals(schemaIdentifier, StringComparison.OrdinalIgnoreCase);
-        }
-
-        /// <summary>
-        /// A deep copy, so that a patch can be applied and validated before it is committed.
-        /// </summary>
-        /// <remarks>
-        /// Round-tripped through Newtonsoft rather than through <c>Schematized.Serialize</c>: the
-        /// latter uses <c>DataContractJsonSerializer</c>, which throws on a default
-        /// <see cref="DateTime"/> - and a resource being copied need not have its metadata dates
-        /// set yet.
-        /// </remarks>
-        private static T Copy<T>(T resource)
-            where T : Schematized
-        {
-            return JsonConvert.DeserializeObject<T>(JsonConvert.SerializeObject(resource));
         }
 
         private static void Exclude(Core2Group group, string identifier)

@@ -21,8 +21,11 @@ Once wired up, your application serves these routes:
 | `GET /scim/ServiceProviderConfig`, `/scim/Schemas`, `/scim/ResourceTypes` | Discovery |
 | `GET/PUT/PATCH/DELETE /scim/{id}` | Service root |
 
-The route prefix `scim` is fixed. If your application already serves URLs under `/scim`,
-they will conflict — host the SCIM endpoints in their own application or virtual directory.
+The route prefix defaults to `scim` but is configurable — pass `pathPrefix` to
+`ScimHttpConfiguration.Configure`. If your application already serves URLs under the prefix you
+choose they will conflict, so either pick another one or host the SCIM endpoints in their own
+application or virtual directory. See `docs/edupass-integration.md` §5 for the constraints:
+the value is process-wide and cannot change once routing has read it.
 
 You write one class: a provider that maps SCIM operations onto your own user store.
 Everything else — routing, JSON shape, filtering, error mapping — is done for you.
@@ -105,8 +108,16 @@ Two things to know:
 `InMemoryProvider` in `Microsoft.SCIM.WebHostSample/Provider` is a complete worked example.
 It is a reference, not a starting point — it stores everything in process memory.
 
-You also need an `IMonitor` for logging. Implement its four methods (`Inform`, `Report`,
-two `Warn` overloads) against your own logger, or copy `ConsoleMonitor` from the sample.
+If you serve both `/Users` and `/Groups`, `InMemoryEduPassProvider` in `SCIM.EduPass/Provider`
+is the more complete reference: it shows how to keep the two consistent — projecting the user's
+read-only `groups` from group membership, and cleaning up both sides on delete — which
+`InMemoryProvider` does not do. That guidance is not Edupass-specific; see
+`docs/edupass-integration.md` §3.
+
+Logging needs no SCIM-specific wiring. The library takes
+`Microsoft.Extensions.Logging.ILogger` and controllers resolve `ILogger<T>`, so your existing
+configuration applies. (The former `IMonitor` and its `Notification` types are gone; the
+`ServiceNotificationIdentifiers` constants are now `ScimEventIds`, numeric values unchanged.)
 
 ## Step 3 — wire it up
 
@@ -134,7 +145,7 @@ public class ScimStartup
     {
         ServiceCollection services = new ServiceCollection();
         services.AddSingleton<IProvider>(new MyProvider());
-        services.AddSingleton<IMonitor>(new MyMonitor());
+        services.AddLogging();
         IServiceProvider serviceProvider = services.BuildServiceProvider();
 
         // Authenticate before the SCIM endpoints run — see step 4.
@@ -207,10 +218,21 @@ app.UseOAuthBearerAuthentication(
     });
 ```
 
-OWIN's JWT middleware has **no OIDC discovery**, unlike its ASP.NET Core equivalent. You
-must supply the issuer's signing keys yourself — implement `IIssuerSecurityKeyProvider`
-against your identity provider's JWKS endpoint and refresh it — or put a gateway in front
-that validates the token for you.
+OWIN's JWT middleware has **no OIDC discovery**, unlike its ASP.NET Core equivalent, so the
+issuer's signing keys are yours to supply. Rather than hand-rolling an
+`IIssuerSecurityKeyProvider` and a key cache, `Anacle.ApiFramework.Authentication` ships one for
+an issuer that publishes a bare JWKS, with the same options object on both hosting frameworks:
+
+```csharp
+app.UseJsonWebKeySetAuthentication(options);          // net48 / OWIN
+builder.Services.AddJsonWebKeySetAuthentication(options);   // ASP.NET Core
+```
+
+It knows nothing about SCIM and does not reference it. Set `ValidAlgorithms` — left unset, the
+token handler accepts any algorithm the key material supports, which is what an
+algorithm-substitution attempt relies on. `docs/edupass-integration.md` §1 covers the options and
+one rotation asymmetry between the legs. A validating gateway in front remains a fine
+alternative.
 
 Do not copy the sample's `TokenController` or its symmetric key. It mints valid tokens for
 any anonymous caller.
@@ -253,9 +275,17 @@ With a valid bearer token, in this order:
 6. `PATCH /scim/Users/{id}` → the change is visible on the next `GET`.
 7. `DELETE /scim/Users/{id}` → 204, and the next `GET` returns 404.
 8. `POST` the same `userName` twice → 409.
+9. `PATCH /scim/Groups/{id}` with a `replace` on `members` → the membership becomes exactly the
+   values you sent, not the old set plus them.
+10. `PATCH /scim/Users/{id}` with `{"op": "remove", "path": "title"}` and no `value` → the
+    attribute is cleared.
+11. `PATCH` any resource with a path your resource type does not model → 400 with `scimType`
+    `invalidPath`, and nothing else in the request applied.
 
 If step 3 returns 500, your provider threw something that is not an
-`HttpResponseException`. If steps 6 and 7 return 405, revisit step 5.
+`HttpResponseException`. If steps 6 and 7 return 405, revisit step 5. Steps 9 to 11 all
+answered success while doing nothing before the fixes in `docs/scim-conformance.md` §5 items 12
+and 13 — worth checking explicitly, because the failure mode is silence.
 
 `PostmanCollection.json` in this repository exercises the full surface, and
 `Microsoft.SCIM.WebHostSample.IIS` passes all of the checks above under IIS Express.

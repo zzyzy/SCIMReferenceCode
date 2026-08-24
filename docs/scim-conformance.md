@@ -79,6 +79,15 @@ and once against `scim/Groups` with `Core2Group` payloads.
 | U28 | `DELETE /{unknown-id}` | **204** | — | empty | see note below |
 | U29 | Groups only: `PATCH` add a `members` value, then `GET` | **204** then **200** | — | the member present in `members` | RFC 7643 §4.2 |
 | U30 | Groups only: `PATCH` remove a `members` value, then `GET` | **204** then **200** | — | the member absent from `members` | RFC 7643 §4.2 |
+| U31 | Groups only: `PATCH` replace `members`, then `GET` | **204** then **200** | — | `members` holds exactly the operation's values | RFC 7644 §3.5.2.3 — **fixed, see §5 item 12** |
+| U32 | `PATCH` remove with `path` and no `value` | **204** / **200** per U17/U18 | — | the named attribute cleared | RFC 7644 §3.5.2.2 — **fixed, see §5 item 12** |
+| U33 | `PATCH` a path the resource type does not model | **400** | — | `Core2Error` with `scimType` `invalidPath` | RFC 7644 §3.5.2, §3.12 — **behaviour change, see §5 item 13** |
+
+> **Note on U31-U33.** All three previously answered success while doing nothing. U31 meant a
+> full Group membership sync silently applied no change; U32 meant no attribute could be removed
+> by path alone; U33 meant a malformed operation could never fail its request, so the atomicity
+> §3.5.2 requires could not be enforced. `nickName`, `locale`, `timezone` and `userType` were
+> also modelled and advertised but absent from the patcher, and are now applied.
 
 > **Note on U13-U15.** `attributes` and `excludedAttributes` were parsed and passed to the
 > provider but never applied to a response body; the sample providers ignored them and no
@@ -224,6 +233,21 @@ against the `netcoreapp3.1` build should expect exactly these differences and no
     `GET scim/token` fail outright with `IDX10720`. The value is still an obvious dummy in a
     file named `Development` — see the `_comment_IssuerSigningKey` next to it. Forced by the
     IdentityModel 5.6.0 → 8.x upgrade, not chosen.
+12. **Three PATCH operations that answered success now take effect** (rows U31, U32, and the
+    four unpatched attributes). `Apply(Core2Group, PatchOperation2)` handled only `Add` and
+    `Remove` under `members`, so a `Replace` fell through the inner switch; the user patcher
+    deserialized an absent `value` without a null guard and then substituted a value object
+    whose own value was null, which every singular-attribute case reads as the removal of some
+    *other* value and ignores. Nothing about these was deliberate.
+13. **A PATCH path the resource type does not model is now rejected with 400 `invalidPath`**
+    (row U33), where it was previously discarded silently. This is the one change here that can
+    break a working client: anything sending a path this library does not model will start
+    seeing failures instead of no-ops. It is what RFC 7644 §3.5.2 requires, and without it the
+    atomicity the Edupass specification demands of a multi-operation PATCH cannot be enforced —
+    a malformed operation that cannot fail cannot fail its request either. `Core2EnterpriseUser`
+    gained a virtual `TryPatchExtensionAttribute` so that a derived type carrying a schema
+    extension can claim its own paths before the core patcher rejects them; a type that does not
+    override it will see 400 on every PATCH against its extension.
 
 ---
 
