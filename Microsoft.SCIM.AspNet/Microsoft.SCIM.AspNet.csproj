@@ -9,6 +9,11 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNet.WebApi.Core" Version="5.2.9" />
     <PackageReference Include="Microsoft.AspNet.WebApi.Owin" Version="5.2.9" />
+    <!--
+      Pinned: Microsoft.AspNet.WebApi.Owin 5.2.9 pulls Microsoft.Owin 2.0.2 transitively, which
+      carries GHSA-hxrm-9w7p-39cc. 4.2.2 is the version the OWIN hosts already use.
+    -->
+    <PackageReference Include="Microsoft.Owin" Version="4.2.2" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
   </ItemGroup>
 
