@@ -153,11 +153,10 @@ Consequences worth knowing:
 
 - **In-memory provider.** `InMemoryProvider` in both samples keeps everything in process
   memory. Nothing survives a restart and nothing is shared across a farm.
-- **The token issuer.** `scim/token` in both samples mints bearer tokens for any anonymous
-  caller, signed with a key committed to this repository. Both controllers are marked
-  `[Obsolete(..., error: true)]` so they cannot be referenced from code; they are still
-  reachable over HTTP because MVC and Web API discover controllers by reflection. Delete them
-  or replace them.
+- **Tokens.** Neither sample issues them any more - the `scim/token` controllers were an
+  anonymously reachable JWT issuer and have been deleted. The dev signing key is still a dummy
+  committed to this repository, so anyone reading it can mint a token the samples accept;
+  README.md has the recipe. Wire a real OAuth authority for anything else.
 - **`ASPNETCORE_ENVIRONMENT`** drives the configuration layering on both legs, including the
   net48 one, where the name is admittedly a lie — it was chosen so that one variable, one set
   of docs and one CI script covers both.

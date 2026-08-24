@@ -110,11 +110,29 @@ The SCIM standard leaves authentication and authorization relatively open. You c
 > These authorization methods provided by this repo are solely for testing. When integrating with Azure AD, review the authorization guidance provided [here](https://docs.microsoft.com/azure/active-directory/app-provisioning/use-scim-to-provision-users-and-groups#authorization-for-provisioning-connectors-in-the-application-gallery). 
 
 > **⚠️ [DO NOT USE IN PRODUCTION]**
-> **This applies to both samples.** `TokenController` in `Microsoft.SCIM.WebHostSample` and its counterpart in `Microsoft.SCIM.WebHostSample.Net48` are anonymously reachable JWT issuers intended only for local sample/integration-test flows, signed with a symmetric key committed to this repository. The dev-mode `TokenValidationParameters` - in `Program.cs.ConfigureJwtBearerOptons` on the net10.0 sample and in `Startup.cs.ConfigureAuthentication` on the net48 sample - disable every JWT validation check (issuer, audience, lifetime, signing key), and both are guarded by `#if DEBUG` so Release builds physically cannot ship the bypass. Both samples print a DEV-ONLY banner at startup saying so.
+> **This applies to both samples.** The dev-mode `TokenValidationParameters` - in `Program.cs.ConfigureJwtBearerOptons` on the net10.0 sample and in `Startup.cs.ConfigureAuthentication` on the net48 sample - disable every JWT validation check (issuer, audience, lifetime, signing key). Both are guarded by `#if DEBUG` so Release builds physically cannot ship the bypass, and both samples print a DEV-ONLY banner at startup saying so. The signing key is a dummy committed to this repository, so anyone reading it can mint a token the samples accept.
 >
 > **Neither sample enables HTTPS.** They are HTTP-only development harnesses, deliberately, so the two hosting legs can be compared like-for-like. TLS is the host's responsibility - see `docs/net48-hosting.md`.
 >
-> **Before deploying any SCIM endpoint derived from either sample to a non-sample environment**, delete the token controller and the dev-mode branch, replace them with a properly authenticated, audience-scoped OAuth token issuer, and terminate TLS.
+> **Before deploying any SCIM endpoint derived from either sample to a non-sample environment**, delete the dev-mode branch, wire a properly authenticated, audience-scoped OAuth issuer, and terminate TLS.
+
+### Getting a token for the samples
+
+The samples no longer ship a `/scim/token` endpoint - it was an anonymously reachable JWT issuer, which is not something a reference implementation should teach. Mint a development token yourself from the dummy key in `appsettings.Development.json`:
+
+```bash
+python -c "
+import base64, hmac, hashlib, json, time
+key = b'A1B2C3D4E5F6A1B2C3D4E5F6A1B2C3D4'
+def seg(d): return base64.urlsafe_b64encode(json.dumps(d, separators=(',',':')).encode()).rstrip(b'=')
+body = seg({'alg':'HS256','typ':'JWT'}) + b'.' + seg({
+    'iss':'Microsoft.Security.Bearer', 'aud':'Microsoft.Security.Bearer',
+    'nbf':int(time.time()), 'exp':int(time.time())+7200})
+print((body + b'.' + base64.urlsafe_b64encode(hmac.new(key, body, hashlib.sha256).digest()).rstrip(b'=')).decode())
+"
+```
+
+Paste the result into Postman's `{{token}}` variable, or send it as `Authorization: Bearer <token>`. For a real endpoint, use a real OAuth authority instead - `Anacle.ApiFramework.Authentication` wires one for both hosting legs, see `docs/edupass-integration.md` §1.
 
 
 ## Contributing to the reference code

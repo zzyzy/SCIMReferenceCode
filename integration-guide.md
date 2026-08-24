@@ -216,8 +216,8 @@ provider rather than you hand-rolling one — `app.UseJsonWebKeySetAuthenticatio
 `ValidAlgorithms`, or the handler accepts any algorithm the key material supports. See
 `docs/edupass-integration.md` §1. A validating gateway in front also works.
 
-Do not copy the sample's `TokenController` or its symmetric key. It mints valid tokens for
-any anonymous caller.
+Do not copy the samples' symmetric signing key - it is a committed dummy, and anyone reading
+this repository can mint a token with it.
 
 ## Step 5 — fix IIS for PUT, PATCH and DELETE
 

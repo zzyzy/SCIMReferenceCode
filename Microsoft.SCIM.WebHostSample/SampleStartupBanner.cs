@@ -1,4 +1,4 @@
-//------------------------------------------------------------
+﻿//------------------------------------------------------------
 // Copyright (c) Microsoft Corporation.  All rights reserved.
 //------------------------------------------------------------
 
@@ -33,9 +33,9 @@ namespace Microsoft.SCIM.WebHostSample
                 Console.WriteLine();
                 Console.WriteLine("  * NO TLS. Neither sample enables HTTPS, HSTS or an HTTPS redirect.");
                 Console.WriteLine("    Terminating TLS is the host's responsibility - see docs/net48-hosting.md.");
-                Console.WriteLine("  * The scim/token endpoint issues bearer tokens to ANY anonymous caller,");
-                Console.WriteLine("    signed with a symmetric key committed to this repository. Delete it or");
-                Console.WriteLine("    replace it with a real OAuth issuer before deploying anything.");
+                Console.WriteLine("  * Bearer tokens are signed with a symmetric key committed to this");
+                Console.WriteLine("    repository, so anyone reading it can mint one. Wire a real OAuth");
+                Console.WriteLine("    issuer before deploying anything - see README.md.");
                 Console.WriteLine("  * In a DEBUG build with ASPNETCORE_ENVIRONMENT=Development, JWT validation");
                 Console.WriteLine("    (issuer, audience, lifetime, signing key) is disabled outright.");
                 Console.WriteLine("  * The provider stores everything in memory. Nothing survives a restart.");

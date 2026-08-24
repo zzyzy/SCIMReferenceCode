@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <!--
     Demonstrates integration-guide.md Option A: adding the SCIM endpoints to an application
@@ -65,7 +65,6 @@
   <ItemGroup>
     <Compile Include="..\Microsoft.SCIM.WebHostSample\Provider\**\*.cs" Link="Provider\%(Filename)%(Extension)" />
     <Compile Include="..\Microsoft.SCIM.WebHostSample\Resources\**\*.cs" Link="Resources\%(Filename)%(Extension)" />
-    <Compile Include="..\Microsoft.SCIM.WebHostSample.Net48\Controllers\TokenController.cs" Link="Controllers\TokenController.cs" />
     <None Include="..\Microsoft.SCIM.WebHostSample\appsettings*.json" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

@@ -69,8 +69,9 @@ hashes rather than plaintext and compares them in fixed time — an ordinary str
 returns as soon as two bytes differ, which leaks a key one character at a time to a caller who
 can measure it.
 
-**Delete `TokenController` from any host you deploy.** It mints HS256 tokens for anonymous
-callers. It is a development convenience and has no place in front of a real Edupass endpoint.
+The samples no longer ship a `scim/token` issuer - it minted HS256 tokens for anonymous
+callers, which has no place in a reference implementation. README.md has the recipe for minting
+a development token from the committed dummy key.
 
 ---
 
