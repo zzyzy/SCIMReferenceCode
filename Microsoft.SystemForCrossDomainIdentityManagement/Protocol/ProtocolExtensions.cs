@@ -1,4 +1,4 @@
-//------------------------------------------------------------
+﻿//------------------------------------------------------------
 // Copyright (c) Microsoft Corporation.  All rights reserved.
 //------------------------------------------------------------
 
@@ -1052,10 +1052,10 @@ namespace Microsoft.SCIM
             (
                     (
                             operation.Value != null
-                        && operation.Value.Count != 1
+                        && operation.Value.Count > 1
                     )
                 || (
-                            null == operation.Value
+                            (null == operation.Value || operation.Value.Count < 1)
                         && operation.Name != OperationName.Remove
                     )
             )
@@ -1105,7 +1105,7 @@ namespace Microsoft.SCIM
                     };
             }
 
-            string value = operation.Value?.Single().Value;
+            string value = operation.Value?.FirstOrDefault()?.Value;
             if
             (
                     value != null
@@ -1193,10 +1193,10 @@ namespace Microsoft.SCIM
             (
                     (
                            operation.Value != null
-                        && operation.Value.Count != 1
+                        && operation.Value.Count > 1
                     )
                 || (
-                            null == operation.Value
+                            (null == operation.Value || operation.Value.Count < 1)
                         && operation.Name != OperationName.Remove
                     )
             )
@@ -1225,7 +1225,7 @@ namespace Microsoft.SCIM
                     };
             }
 
-            string value = operation.Value?.Single().Value;
+            string value = operation.Value?.FirstOrDefault()?.Value;
             if
             (
                     value != null

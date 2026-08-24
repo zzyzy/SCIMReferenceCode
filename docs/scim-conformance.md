@@ -31,14 +31,13 @@ net48). See §5 item 3 for why.
 | Resource types | `scim/ResourceTypes` | `ResourceTypesController` |
 | Service provider config | `scim/ServiceProviderConfig` | `ServiceProviderConfigurationController` |
 | Bulk | `scim/Bulk` | `BulkRequestController` |
-| Token issuer (**sample only**) | `scim/token` | `TokenController` |
 
 `scim` comes from `SchemaConstants.PathInterface`; the resource segments come from
 `ProtocolConstants.PathUsers` / `PathGroups` / `PathBulk` and
 `ServiceConstants.PathSegment*`. Route matching is case-insensitive on both legs.
 
-Every SCIM endpoint except the sample token issuer requires authorization (`[Authorize]` on
-Core, `System.Web.Http.AuthorizeAttribute` on net48).
+Every SCIM endpoint requires authorization (`[Authorize]` on Core,
+`System.Web.Http.AuthorizeAttribute` on net48).
 
 ---
 
@@ -80,14 +79,17 @@ and once against `scim/Groups` with `Core2Group` payloads.
 | U29 | Groups only: `PATCH` add a `members` value, then `GET` | **204** then **200** | — | the member present in `members` | RFC 7643 §4.2 |
 | U30 | Groups only: `PATCH` remove a `members` value, then `GET` | **204** then **200** | — | the member absent from `members` | RFC 7643 §4.2 |
 | U31 | Groups only: `PATCH` replace `members`, then `GET` | **204** then **200** | — | `members` holds exactly the operation's values | RFC 7644 §3.5.2.3 — **fixed, see §5 item 12** |
-| U32 | `PATCH` remove with `path` and no `value` | **204** / **200** per U17/U18 | — | the named attribute cleared | RFC 7644 §3.5.2.2 — **fixed, see §5 item 12** |
+| U32 | `PATCH` remove with `path` and no `value`, singular attribute | **204** / **200** per U17/U18 | — | the named attribute cleared | RFC 7644 §3.5.2.2 — **fixed, see §5 item 12** |
+| U32a | `PATCH` remove with `path` and no `value`, a multi-valued sub-path such as `emails[type eq "work"].value` | **204** / **200** per U17/U18 | — | that entry removed, the others retained | RFC 7644 §3.5.2.2 — **fixed, see §5 item 12** |
 | U33 | `PATCH` a path the resource type does not model | **400** | — | `Core2Error` with `scimType` `invalidPath` | RFC 7644 §3.5.2, §3.12 — **behaviour change, see §5 item 13** |
 
 > **Note on U31-U33.** All three previously answered success while doing nothing. U31 meant a
 > full Group membership sync silently applied no change; U32 meant no attribute could be removed
 > by path alone; U33 meant a malformed operation could never fail its request, so the atomicity
-> §3.5.2 requires could not be enforced. `nickName`, `locale`, `timezone` and `userType` were
-> also modelled and advertised but absent from the patcher, and are now applied.
+> §3.5.2 requires could not be enforced. `nickName`, `locale`, `timezone`, `userType` and `ims`
+> were also modelled and advertised but absent from the patcher, and are now applied. U32 was two
+> bugs: the singular attributes, and then the multi-valued ones (U32a), whose guard read the
+> now-empty value collection as "wrong number of values" and returned.
 
 > **Note on U13-U15.** `attributes` and `excludedAttributes` were parsed and passed to the
 > provider but never applied to a response body; the sample providers ignored them and no
@@ -229,16 +231,19 @@ against the `netcoreapp3.1` build should expect exactly these differences and no
     `PostmanCollection.json` assertion that a 409 body contains `detail` pass rather than
     accidentally fail.
 11. **The committed development signing key is 32 characters, up from 24.** IdentityModel 8.x
-    enforces HS256's 256-bit minimum key size; the previous 192-bit value makes
-    `GET scim/token` fail outright with `IDX10720`. The value is still an obvious dummy in a
+    enforces HS256's 256-bit minimum key size; the previous 192-bit value makes token
+    validation fail outright with `IDX10720`. The value is still an obvious dummy in a
     file named `Development` — see the `_comment_IssuerSigningKey` next to it. Forced by the
     IdentityModel 5.6.0 → 8.x upgrade, not chosen.
 12. **Three PATCH operations that answered success now take effect** (rows U31, U32, and the
-    four unpatched attributes). `Apply(Core2Group, PatchOperation2)` handled only `Add` and
+    five unpatched attributes). `Apply(Core2Group, PatchOperation2)` handled only `Add` and
     `Remove` under `members`, so a `Replace` fell through the inner switch; the user patcher
     deserialized an absent `value` without a null guard and then substituted a value object
     whose own value was null, which every singular-attribute case reads as the removal of some
-    *other* value and ignores. Nothing about these was deliberate.
+    *other* value and ignores. The multi-valued patchers - emails, phone numbers, addresses,
+    roles and now ims - then had the same fault in a different shape: their guard demanded
+    exactly one value, and an omitted value is an empty collection. Nothing about these was
+    deliberate.
 13. **A PATCH path the resource type does not model is now rejected with 400 `invalidPath`**
     (row U33), where it was previously discarded silently. This is the one change here that can
     break a working client: anything sending a path this library does not model will start
@@ -321,8 +326,7 @@ U1 (201 + a single `Location` + `application/scim+json`), U2, U3, U5, U6, U7, U8
 U17, U18, U20, U22 (200, the D15 change), U26, U27, U28 (as amended above); D1, D2, D3, D6,
 D7, D8 (`/Root/Get` now 404s), D9; X1 for 400/404/409/501, X2, X5, X7, X8, X10.
 
-`GET scim/token` issues a usable token, and both the hosting-layer exception filter paths were
-exercised deliberately rather than inferred: `DELETE scim/x` (a rethrown 501 out of
+Both the hosting-layer exception filter paths were exercised deliberately rather than inferred: `DELETE scim/x` (a rethrown 501 out of
 `ScimRequestHandler.DeleteAsync`) and `POST scim/Bulk` with a null body (a throw out of
 `ScimDiscoveryRequestHandler`) each return the right status with a `Core2Error` body rather
 than a 500. That is risk R2 discharged by test.

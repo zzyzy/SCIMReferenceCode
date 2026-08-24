@@ -191,6 +191,10 @@ namespace Microsoft.SCIM
                     user.PatchElectronicMailAddresses(operation);
                     break;
 
+                case AttributeNames.Ims:
+                    user.PatchInstantMessagings(operation);
+                    break;
+
                 case AttributeNames.ExternalIdentifier:
                     value = operation.Value.SingleOrDefault();
 
@@ -410,10 +414,10 @@ namespace Microsoft.SCIM
             (
                     (
                             operation.Value != null
-                        && operation.Value.Count != 1
+                        && operation.Value.Count > 1
                     )
                 || (
-                            null == operation.Value
+                            (null == operation.Value || operation.Value.Count < 1)
                         && operation.Name != OperationName.Remove
                     )
             )
@@ -465,7 +469,7 @@ namespace Microsoft.SCIM
                         StringComparison.Ordinal)
                 )
                 {
-                    value = operation.Value?.Single().Value;
+                    value = operation.Value?.FirstOrDefault()?.Value;
                     if
                     (
                             value != null
@@ -486,7 +490,7 @@ namespace Microsoft.SCIM
                         StringComparison.Ordinal)
                 )
                 {
-                    value = operation.Value?.Single().Value;
+                    value = operation.Value?.FirstOrDefault()?.Value;
                     if
                     (
                             value != null
@@ -507,7 +511,7 @@ namespace Microsoft.SCIM
                         StringComparison.Ordinal)
                 )
                 {
-                    value = operation.Value?.Single().Value;
+                    value = operation.Value?.FirstOrDefault()?.Value;
                     if
                     (
                             value != null
@@ -528,7 +532,7 @@ namespace Microsoft.SCIM
                         StringComparison.Ordinal)
                 )
                 {
-                    value = operation.Value?.Single().Value;
+                    value = operation.Value?.FirstOrDefault()?.Value;
                     if
                     (
                             value != null
@@ -549,7 +553,7 @@ namespace Microsoft.SCIM
                         StringComparison.Ordinal)
                 )
                 {
-                    value = operation.Value?.Single().Value;
+                    value = operation.Value?.FirstOrDefault()?.Value;
                     if
                     (
                             value != null
@@ -573,7 +577,7 @@ namespace Microsoft.SCIM
                         StringComparison.Ordinal)
                 )
                 {
-                    value = operation.Value?.Single().Value;
+                    value = operation.Value?.FirstOrDefault()?.Value;
                     if
                     (
                             value != null
@@ -850,10 +854,10 @@ namespace Microsoft.SCIM
             (
                     (
                             operation.Value != null
-                        && operation.Value.Count != 1
+                        && operation.Value.Count > 1
                     )
                 || (
-                            null == operation.Value
+                            (null == operation.Value || operation.Value.Count < 1)
                         && operation.Name != OperationName.Remove
                     )
             )
@@ -880,7 +884,7 @@ namespace Microsoft.SCIM
                     StringComparison.OrdinalIgnoreCase)
             )
             {
-                value = operation.Value?.Single().Value;
+                value = operation.Value?.FirstOrDefault()?.Value;
                 if
                 (
                         value != null
@@ -901,7 +905,7 @@ namespace Microsoft.SCIM
                     StringComparison.OrdinalIgnoreCase)
             )
             {
-                value = operation.Value?.Single().Value;
+                value = operation.Value?.FirstOrDefault()?.Value;
                 if
                 (
                         value != null
@@ -958,6 +962,93 @@ namespace Microsoft.SCIM
             }
         }
 
+        /// <summary>
+        /// Applies an operation to <c>ims</c>, addressed as <c>ims[type eq "..."].value</c>.
+        /// </summary>
+        /// <remarks>
+        /// Modelled on <see cref="PatchPhoneNumbers"/>, with one difference: the type is not
+        /// checked against the canonical list on <see cref="InstantMessagingBase"/>. RFC 7643
+        /// section 7 makes canonical values a recommendation rather than a constraint, and
+        /// rejecting an unlisted type here would mean silently discarding the operation - the
+        /// failure mode this pass exists to remove.
+        /// </remarks>
+        private static void PatchInstantMessagings(this Core2EnterpriseUser user, PatchOperation2 operation)
+        {
+            if (null == operation)
+            {
+                return;
+            }
+
+            if (null == operation.Path.ValuePath
+                || string.IsNullOrWhiteSpace(operation.Path.ValuePath.AttributePath))
+            {
+                return;
+            }
+
+            IFilter subAttribute = operation.Path.SubAttributes.SingleOrDefault();
+            if (null == subAttribute
+                || !string.Equals(
+                        AttributeNames.Type,
+                        subAttribute.AttributePath,
+                        StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            if ((null != operation.Value && operation.Value.Count > 1)
+                || ((operation.Value?.Count ?? 0) < 1 && operation.Name != OperationName.Remove))
+            {
+                return;
+            }
+
+            InstantMessaging existing =
+                user.InstantMessagings?.SingleOrDefault(
+                    (InstantMessaging item) =>
+                        string.Equals(subAttribute.ComparisonValue, item.ItemType, StringComparison.Ordinal));
+
+            string value = operation.Value?.FirstOrDefault()?.Value;
+            if (null != value
+                && OperationName.Remove == operation.Name
+                && string.Equals(value, existing?.Value, StringComparison.OrdinalIgnoreCase))
+            {
+                value = null;
+            }
+
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                if (null != existing)
+                {
+                    user.InstantMessagings =
+                        user
+                        .InstantMessagings
+                        .Where(
+                            (InstantMessaging item) =>
+                                !string.Equals(subAttribute.ComparisonValue, item.ItemType, StringComparison.Ordinal))
+                        .ToArray();
+                }
+
+                return;
+            }
+
+            if (null != existing)
+            {
+                existing.Value = value;
+                return;
+            }
+
+            InstantMessaging added =
+                new InstantMessaging()
+                {
+                    ItemType = subAttribute.ComparisonValue,
+                    Value = value,
+                };
+
+            user.InstantMessagings =
+                null == user.InstantMessagings
+                    ? new[] { added }
+                    : user.InstantMessagings.Concat(new[] { added }).ToArray();
+        }
+
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Maintainability", "CA1502:AvoidExcessiveComplexity", Justification = "None")]
         private static void PatchPhoneNumbers(this Core2EnterpriseUser user, PatchOperation2 operation)
         {
@@ -997,10 +1088,10 @@ namespace Microsoft.SCIM
             (
                     (
                             operation.Value != null
-                        && operation.Value.Count != 1
+                        && operation.Value.Count > 1
                     )
                 || (
-                            null == operation.Value
+                            (null == operation.Value || operation.Value.Count < 1)
                         && operation.Name != OperationName.Remove
                     )
             )
@@ -1052,7 +1143,7 @@ namespace Microsoft.SCIM
                     };
             }
 
-            string value = operation.Value?.Single().Value;
+            string value = operation.Value?.FirstOrDefault()?.Value;
             if
             (
                     value != null
