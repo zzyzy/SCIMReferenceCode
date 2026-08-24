@@ -92,6 +92,10 @@ and once against `scim/Groups` with `Core2Group` payloads.
 | U41 | Concurrent `POST` of one `userName` | **201** once, **409** for the rest | — | one resource in the store | RFC 7643 §4.1.1 — **fixed, see §5 item 18** |
 | U42 | `GET ?count=abc` or `?startIndex=xyz` | **400** | — | `Core2Error` | RFC 7644 §3.4.2.4 — **fixed, see §5 item 19** |
 | U43 | `HEAD` on any SCIM route | **405** | — | empty | **parity fix, see §5 item 19** |
+| U44 | `PATCH` replacing a complex attribute (`manager`) with an object value | **200** / **204** | — | the attribute set, not emptied | RFC 7644 §3.5.2 — **fixed, see §5 item 20** |
+| U45 | `PATCH` adding or removing a whole `roles` entry | **200** / **204** | — | the entry added or removed | RFC 7644 §3.5.2 — **fixed, see §5 item 20** |
+| U46 | `PATCH` renaming a Group onto an existing `displayName` | **409** | — | `Core2Error` | RFC 7644 §3.3, §3.12 — **fixed, see §5 item 20** |
+| U47 | `POST` / `PUT` with two `primary` values in one multi-valued attribute | **400** | — | `Core2Error` with `scimType` `invalidValue` | RFC 7643 §2.4 — **behaviour change, see §5 item 21** |
 
 > **Note on U31-U33.** All three previously answered success while doing nothing. U31 meant a
 > full Group membership sync silently applied no change; U32 meant no attribute could be removed
@@ -310,6 +314,20 @@ against the `netcoreapp3.1` build should expect exactly these differences and no
     response at all, which a health-check probe reads as the service being down. ASP.NET Core
     does not route `HEAD` to `GET` and already answered 405, so a message handler on the net48
     leg now does the same. RFC 7644 defines no `HEAD` semantics.
+20. **Three PATCH operations that answered success now take effect** (rows U44, U45, U46). An
+    operation's `value` arrives in one of three shapes - an array of complex values, a single
+    complex value, or a bare scalar - and only the first and last were read. A single complex
+    value, which is exactly what replacing `manager` carries, failed to deserialize and yielded
+    a value whose own value was null, so the attribute was emptied instead of set; both the user
+    and the group path now share one parser covering all three. `roles` could only be reached
+    through a sub-attribute path such as `roles[type eq "x"].value`, so adding a role or
+    removing one by filter changed nothing; whole-entry add, remove and replace are implemented.
+    And a Group could be renamed onto another Group's `displayName`, which create and replace
+    both refuse - PATCH now refuses it too.
+21. **Two `primary` values in one multi-valued attribute are rejected** (row U47). RFC 7643 §2.4
+    allows `primary` no more than once; two of them leave every consumer to choose arbitrarily,
+    and two consumers need not choose alike. Create and replace answer 400 `invalidValue`. This
+    can break a client that was sending two and being accepted.
 
 ---
 

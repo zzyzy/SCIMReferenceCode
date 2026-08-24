@@ -271,6 +271,21 @@ namespace Microsoft.SCIM.WebHostSample.Provider
                     // has succeeded.
                     Core2Group candidate = ResourceCloner.Clone(group);
                     candidate.Apply(patchRequest);
+
+                    // The same uniqueness rule CreateAsync and ReplaceAsync enforce. A PATCH can
+                    // rename a group too, and without this it could rename one onto another's
+                    // displayName - leaving two groups a client cannot tell apart.
+                    if
+                    (
+                        this.storage.Groups.Values.Any(
+                            (Core2Group existing) =>
+                                string.Equals(existing.DisplayName, candidate.DisplayName, StringComparison.Ordinal)
+                                && !string.Equals(existing.Identifier, candidate.Identifier, StringComparison.OrdinalIgnoreCase))
+                    )
+                    {
+                        throw new HttpResponseException(HttpStatusCode.Conflict);
+                    }
+
                     candidate.Metadata.LastModified = DateTime.UtcNow;
 
                     this.storage.Groups[patch.ResourceIdentifier.Identifier] = candidate;

@@ -53,6 +53,61 @@ namespace Microsoft.SCIM
             }
         }
 
+        /// <summary>
+        /// Reads the raw <c>value</c> of a combined patch operation into operation values.
+        /// </summary>
+        /// <remarks>
+        /// Three shapes reach this: an array of complex values, a single complex value, and a
+        /// bare scalar. Only the first and last were handled, and a single complex value - which
+        /// is exactly what a replace of a complex attribute such as <c>manager</c> carries -
+        /// fell through to the scalar branch, failed to deserialize, and produced a value whose
+        /// own value was null. The attribute was then emptied rather than set.
+        /// </remarks>
+        internal static void ReadValues(PatchOperation2 operation, string rawValue)
+        {
+            if (null == operation || null == rawValue)
+            {
+                return;
+            }
+
+            OperationValue[] values =
+                JsonConvert.DeserializeObject<OperationValue[]>(
+                    rawValue,
+                    ProtocolConstants.JsonSettings.Value);
+
+            if (null != values)
+            {
+                foreach (OperationValue value in values)
+                {
+                    operation.AddValue(value);
+                }
+
+                return;
+            }
+
+            OperationValue single =
+                JsonConvert.DeserializeObject<OperationValue>(
+                    rawValue,
+                    ProtocolConstants.JsonSettings.Value);
+
+            if (null != single && (null != single.Value || null != single.Reference))
+            {
+                operation.AddValue(single);
+                return;
+            }
+
+            string scalar =
+                JsonConvert.DeserializeObject<string>(
+                    rawValue,
+                    ProtocolConstants.JsonSettings.Value);
+
+            operation.AddValue(
+                new OperationValue()
+                {
+                    Value = scalar
+                });
+        }
+
         public static void Apply(this Core2Group group, PatchRequest2 patch)
         {
             if (null == group)
@@ -78,36 +133,7 @@ namespace Microsoft.SCIM
                     Path = operation.Path
                 };
 
-                OperationValue[] values = null;
-                if (operation?.Value != null)
-                {
-                    values =
-                    JsonConvert.DeserializeObject<OperationValue[]>(
-                        operation.Value,
-                        ProtocolConstants.JsonSettings.Value);
-                }
-
-                if (values == null)
-                {
-                    string value = null;
-                    if (operation?.Value != null)
-                    {
-                        value = JsonConvert.DeserializeObject<string>(operation.Value, ProtocolConstants.JsonSettings.Value);
-                    }
-
-                    OperationValue valueSingle = new OperationValue()
-                    {
-                        Value = value
-                    };
-                    operationInternal.AddValue(valueSingle);
-                }
-                else
-                {
-                    foreach(OperationValue value in values)
-                    {
-                        operationInternal.AddValue(value);
-                    }
-                }
+                ProtocolExtensions.ReadValues(operationInternal, operation?.Value);
 
                 group.Apply(operationInternal);
             }
@@ -1155,6 +1181,72 @@ namespace Microsoft.SCIM
             return result;
         }
 
+        /// <summary>
+        /// Applies an operation naming <c>roles</c> as a whole, or one entry of it by filter.
+        /// </summary>
+        private static IEnumerable<Role> PatchRoleEntries(IEnumerable<Role> roles, PatchOperation2 operation)
+        {
+            List<Role> current =
+                null == roles ? new List<Role>() : new List<Role>(roles);
+
+            IFilter selector = operation.Path.SubAttributes?.SingleOrDefault();
+
+            if (OperationName.Remove == operation.Name)
+            {
+                if (null == selector && (null == operation.Value || operation.Value.Count < 1))
+                {
+                    return Enumerable.Empty<Role>();
+                }
+
+                IEnumerable<string> removing =
+                    null != selector
+                        ? new[] { selector.ComparisonValue }
+                        : operation.Value.Select((OperationValue item) => item.Value);
+
+                foreach (string value in removing)
+                {
+                    current.RemoveAll(
+                        (Role item) =>
+                            string.Equals(item.Value, value, StringComparison.OrdinalIgnoreCase));
+                }
+
+                return current.ToArray();
+            }
+
+            if (null == operation.Value)
+            {
+                return roles;
+            }
+
+            if (OperationName.Replace == operation.Name && null == selector)
+            {
+                current.Clear();
+            }
+
+            foreach (OperationValue value in operation.Value)
+            {
+                if (string.IsNullOrWhiteSpace(value.Value))
+                {
+                    continue;
+                }
+
+                if (current.Any(
+                        (Role item) =>
+                            string.Equals(item.Value, value.Value, StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+
+                current.Add(
+                    new Role()
+                    {
+                        Value = value.Value
+                    });
+            }
+
+            return current.ToArray();
+        }
+
         internal static IEnumerable<Role> PatchRoles(IEnumerable<Role> roles, PatchOperation2 operation)
         {
             if (null == operation)
@@ -1173,9 +1265,14 @@ namespace Microsoft.SCIM
                 return roles;
             }
 
-            if (null == operation.Path.ValuePath)
+            // A whole-entry operation: "add roles" with a list of values, or "remove
+            // roles[value eq "x"]". Only the sub-attribute shape - roles[type eq "x"].value -
+            // was handled, so the two operations a client is most likely to send answered
+            // success and changed nothing.
+            if (null == operation.Path.ValuePath
+                || string.IsNullOrWhiteSpace(operation.Path.ValuePath.AttributePath))
             {
-                return roles;
+                return ProtocolExtensions.PatchRoleEntries(roles, operation);
             }
 
             if (string.IsNullOrWhiteSpace(operation.Path.ValuePath.AttributePath))

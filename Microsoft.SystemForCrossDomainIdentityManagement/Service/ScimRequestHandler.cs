@@ -4,6 +4,7 @@ namespace Microsoft.SCIM
 {
     using System;
     using System.Collections.Generic;
+    using System.Globalization;
     using System.Linq;
     using System.Net;
     using System.Net.Http;
@@ -509,6 +510,51 @@ namespace Microsoft.SCIM
         }
 
         // Ported from ControllerTemplate<T>.Post.
+
+        /// <summary>
+        /// Whether every multi-valued attribute of <paramref name="resource"/> marks at most one
+        /// value primary.
+        /// </summary>
+        /// <remarks>
+        /// RFC 7643 section 2.4: the primary sub-attribute must appear no more than once per
+        /// multi-valued attribute. Two values both claiming to be primary leaves every consumer
+        /// to pick one arbitrarily, and two consumers need not pick the same one.
+        /// </remarks>
+        private static bool HasSinglePrimary(Resource resource, out string attributeName)
+        {
+            attributeName = null;
+
+            if (!(resource is Core2UserBase user))
+            {
+                return true;
+            }
+
+            KeyValuePair<string, IEnumerable<TypedItem>>[] multiValued =
+                new[]
+                {
+                    new KeyValuePair<string, IEnumerable<TypedItem>>(
+                        AttributeNames.ElectronicMailAddresses, user.ElectronicMailAddresses),
+                    new KeyValuePair<string, IEnumerable<TypedItem>>(
+                        AttributeNames.PhoneNumbers, user.PhoneNumbers),
+                    new KeyValuePair<string, IEnumerable<TypedItem>>(
+                        AttributeNames.Ims, user.InstantMessagings),
+                    new KeyValuePair<string, IEnumerable<TypedItem>>(
+                        AttributeNames.Roles, user.Roles),
+                };
+
+            foreach (KeyValuePair<string, IEnumerable<TypedItem>> attribute in multiValued)
+            {
+                if (null != attribute.Value
+                    && attribute.Value.Count((TypedItem item) => item.Primary) > 1)
+                {
+                    attributeName = attribute.Key;
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
         public virtual async Task<ScimResult> CreateAsync(HttpRequestMessage request, T resource)
         {
             string correlationIdentifier = null;
@@ -519,6 +565,17 @@ namespace Microsoft.SCIM
                 {
                     // The body did not bind: unparseable, or not the request schema.
                     return ScimResult.Status(HttpStatusCode.BadRequest, ScimTypes.InvalidSyntax);
+                }
+
+                if (!ScimRequestHandler<T>.HasSinglePrimary(resource, out string offendingAttribute))
+                {
+                    return ScimResult.Error(
+                        HttpStatusCode.BadRequest,
+                        string.Format(
+                            CultureInfo.InvariantCulture,
+                            SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidOperationTemplate,
+                            offendingAttribute),
+                        ScimTypes.InvalidValue);
                 }
 
                 if (!request.TryGetRequestIdentifier(out correlationIdentifier))
@@ -627,6 +684,17 @@ namespace Microsoft.SCIM
                         HttpStatusCode.BadRequest,
                         SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidIdentifier,
                         ScimTypes.Mutability);
+                }
+
+                if (!ScimRequestHandler<T>.HasSinglePrimary(resource, out string offendingAttribute))
+                {
+                    return ScimResult.Error(
+                        HttpStatusCode.BadRequest,
+                        string.Format(
+                            CultureInfo.InvariantCulture,
+                            SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidOperationTemplate,
+                            offendingAttribute),
+                        ScimTypes.InvalidValue);
                 }
 
                 resource.Identifier = identifier;

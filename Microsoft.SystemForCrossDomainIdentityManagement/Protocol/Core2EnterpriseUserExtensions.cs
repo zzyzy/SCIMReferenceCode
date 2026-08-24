@@ -67,34 +67,7 @@ namespace Microsoft.SCIM
                 // whose own value was null instead made the remove look like the removal of
                 // some other value, which they ignore. Either way nothing could be removed by
                 // path alone.
-                if (null != operation.Value)
-                {
-                    OperationValue[] values =
-                        JsonConvert.DeserializeObject<OperationValue[]>(
-                            operation.Value,
-                            ProtocolConstants.JsonSettings.Value);
-
-                    if (null == values)
-                    {
-                        string value =
-                            JsonConvert.DeserializeObject<string>(
-                                operation.Value,
-                                ProtocolConstants.JsonSettings.Value);
-
-                        operationInternal.AddValue(
-                            new OperationValue()
-                            {
-                                Value = value
-                            });
-                    }
-                    else
-                    {
-                        foreach (OperationValue value in values)
-                        {
-                            operationInternal.AddValue(value);
-                        }
-                    }
-                }
+                ProtocolExtensions.ReadValues(operationInternal, operation.Value);
 
                 user.Apply(operationInternal);
             }
