@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    API authentication modes, one per sub-namespace: Jwt for bearer tokens from an authority
+    that publishes a bare JSON Web Key Set, ApiKey for a shared key in a request header.
+
+    Framework-level and application-agnostic. Nothing here depends on Microsoft.SCIM, and
+    nothing here knows what API it is protecting: a consumer picks a mode and wires it into
+    its own pipeline. Authentication is not the SCIM library's concern.
+
+    Both modes ship in one assembly because they share a target set, a release cadence and a
+    consumer. Referencing it does not activate either mode - that takes an explicit call.
+  -->
+  <PropertyGroup>
+    <TargetFrameworks>net48;net10.0</TargetFrameworks>
+    <AssemblyName>Anacle.ApiFramework.Authentication</AssemblyName>
+    <RootNamespace>Anacle.ApiFramework.Authentication</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.14.0" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.14.0" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <!--
+      Microsoft.Owin.Security.Jwt pulls Newtonsoft.Json 10.0.3 transitively, which carries
+      GHSA-5crp-9r3c-p9vr. Pinned to the version the rest of the solution already uses.
+    -->
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="Microsoft.Owin" Version="4.2.2" />
+    <PackageReference Include="Microsoft.Owin.Security.Jwt" Version="4.2.2" />
+    <PackageReference Include="Owin" Version="1.0.0" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.0" />
+  </ItemGroup>
+
+</Project>

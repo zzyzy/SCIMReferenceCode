@@ -16,38 +16,58 @@ Edupass asks for that the RFCs do not went into `SCIM.EduPass`. That is the whol
 
 ## 1. Authentication
 
+Authentication is not the SCIM library's concern. `Microsoft.SCIM` puts `[Authorize]` on its
+controllers and stops there; which mode satisfies it is the host's decision.
+
+`Anacle.ApiFramework.Authentication` supplies the modes, one per sub-namespace, for both
+hosting frameworks. It knows nothing about SCIM and does not reference it.
+
 Edupass identifies itself with a short-lived ES256-signed JWT and publishes its signing keys at
-`/.well-known/keys`. There is no API key or shared secret alternative.
-
-`ASP.NET Core`:
-
-```csharp
-EduPassAuthenticationOptions edupass =
-    new EduPassAuthenticationOptions
-    {
-        Issuer = EduPassAuthenticationOptions.PreproductionIssuer,
-        Audience = "<your Edupass application code>",
-    };
-
-builder.Services.AddEduPassAuthentication(edupass);
-```
-
-`net48` / IIS, in your OWIN `Startup`:
+`/.well-known/keys`. There is no API key or shared secret alternative, so an Edupass endpoint
+uses the `Jwt` mode. `SCIM.EduPass` contributes only the issuers, the key set path and the
+algorithm:
 
 ```csharp
-app.UseEduPassAuthentication(edupass);
+JsonWebKeySetOptions options =
+    EduPassAuthentication.CreateOptions(
+        EduPassAuthentication.PreproductionIssuer,
+        applicationCode: "<your Edupass application code>");
+
+// ASP.NET Core
+builder.Services.AddJsonWebKeySetAuthentication(options);
+
+// net48 / IIS, in your OWIN Startup
+app.UseJsonWebKeySetAuthentication(options);
 ```
 
-Both call `EduPassKeySetRetriever`, which wraps the JWKS in an `OpenIdConnectConfiguration` so
-that `ConfigurationManager<OpenIdConnectConfiguration>` can be used — bringing caching,
+Both go through `JsonWebKeySetRetriever`, which wraps the key set in an
+`OpenIdConnectConfiguration` so that `ConfigurationManager` can be used — bringing caching,
 background refresh and last-known-good handling rather than a hand-rolled key cache.
 
+`ValidAlgorithms` is required rather than optional. Left unset, the token handler accepts any
+algorithm the key material supports, which is what an algorithm-substitution attempt relies on:
+a token signed with HS256 using the published public key as the shared secret. Both legs are
+tested against exactly that attack.
+
 **One asymmetry to be aware of.** On ASP.NET Core, `RefreshOnIssuerKeyNotFound` re-fetches the
-key set the first time a token arrives with an unrecognised `kid`, which is exactly the rotation
+key set the first time a token arrives with an unrecognised `kid`, which is the rotation
 behaviour the specification asks for. OWIN's JWT middleware does not report *why* validation
 failed, so the net48 leg cannot do the same; it relies on `AutomaticRefreshInterval` instead.
 Set that interval shorter than the window Edupass allows between publishing a key and signing
 with it, or put a validating gateway in front.
+
+### The other mode
+
+`Anacle.ApiFramework.Authentication.ApiKey` reads a key from a request header — `X-Api-Key` by
+default — and resolves it through an `IApiKeyStore` you implement. It does not apply to Edupass,
+which has no key-based option; it is there for a relying party's *other* callers, such as an
+internal admin tool or a monitoring probe. On ASP.NET Core it is a real authentication scheme, so
+it can sit alongside the Edupass JWT scheme with each protecting different endpoints.
+
+Where keys live is deliberately yours to decide. The supplied `HashedApiKeyStore` holds SHA-256
+hashes rather than plaintext and compares them in fixed time — an ordinary string comparison
+returns as soon as two bytes differ, which leaks a key one character at a time to a caller who
+can measure it.
 
 **Delete `TokenController` from any host you deploy.** It mints HS256 tokens for anonymous
 callers. It is a development convenience and has no place in front of a real Edupass endpoint.

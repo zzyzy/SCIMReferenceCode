@@ -2,7 +2,7 @@
 
 #if NET48
 
-namespace Scim.EduPass
+namespace Anacle.ApiFramework.Authentication.Jwt
 {
     using System;
     using System.Collections.Generic;
@@ -11,33 +11,33 @@ namespace Scim.EduPass
     using Microsoft.IdentityModel.Protocols;
     using Microsoft.IdentityModel.Protocols.OpenIdConnect;
     using Microsoft.IdentityModel.Tokens;
-    using Microsoft.Owin.Security.OAuth;
     using Microsoft.Owin.Security.Jwt;
+    using Microsoft.Owin.Security.OAuth;
     using Owin;
 
     /// <summary>
-    /// Supplies Edupass's signing keys to the OWIN JWT middleware.
+    /// Supplies an authority's published signing keys to the OWIN JWT middleware.
     /// </summary>
     /// <remarks>
     /// OWIN's <c>JwtFormat</c> takes an <see cref="IIssuerSecurityKeyProvider"/> and has no
-    /// discovery of its own, so the JWKS handling that ASP.NET Core gets from
+    /// discovery of its own, so the key set handling that ASP.NET Core gets from
     /// <c>JwtBearerOptions</c> has to be supplied here. It is the same
-    /// <c>ConfigurationManager</c> underneath - so caching, background refresh and
+    /// <c>ConfigurationManager</c> underneath, so caching, background refresh and
     /// last-known-good behaviour match the other leg rather than being reimplemented.
     ///
-    /// One difference remains and it matters: OWIN does not tell us that validation failed
-    /// because of an unknown <c>kid</c>, so there is no equivalent of
-    /// <c>RefreshOnIssuerKeyNotFound</c>. Rotation is therefore handled by returning every
-    /// currently published key and letting <c>AutomaticRefreshInterval</c> pick up new ones;
-    /// set that interval shorter than the window Edupass allows between publishing a key and
-    /// signing with it.
+    /// One difference remains and it matters. OWIN does not report that validation failed
+    /// because of an unrecognised key identifier, so there is no equivalent of
+    /// <c>RefreshOnIssuerKeyNotFound</c>. Rotation is handled instead by returning every
+    /// currently published key and letting <c>AutomaticRefreshInterval</c> pick up new ones -
+    /// so set that interval shorter than the window the authority allows between publishing a
+    /// key and signing with it.
     /// </remarks>
-    public class EduPassIssuerSecurityKeyProvider : IIssuerSecurityKeyProvider
+    public class JsonWebKeySetIssuerSecurityKeyProvider : IIssuerSecurityKeyProvider
     {
         private readonly ConfigurationManager<OpenIdConnectConfiguration> configurationManager;
-        private readonly EduPassAuthenticationOptions options;
+        private readonly JsonWebKeySetOptions options;
 
-        public EduPassIssuerSecurityKeyProvider(EduPassAuthenticationOptions options)
+        public JsonWebKeySetIssuerSecurityKeyProvider(JsonWebKeySetOptions options)
         {
             if (null == options)
             {
@@ -47,7 +47,7 @@ namespace Scim.EduPass
             options.Validate();
 
             this.options = options;
-            this.configurationManager = EduPassKeySetRetriever.CreateConfigurationManager(options);
+            this.configurationManager = JsonWebKeySetRetriever.CreateConfigurationManager(options);
         }
 
         public string Issuer
@@ -83,18 +83,17 @@ namespace Scim.EduPass
     }
 
     /// <summary>
-    /// Wires Edupass bearer token validation into an OWIN pipeline.
+    /// Wires JWKS-backed bearer token validation into an OWIN pipeline.
     /// </summary>
-    public static class EduPassAuthenticationExtensions
+    public static class JwtAuthenticationExtensions
     {
         /// <summary>
-        /// Adds bearer token authentication configured for Edupass. Call before the SCIM
-        /// endpoints run - every SCIM controller carries <c>[Authorize]</c>, so without it every
-        /// request is a 401.
+        /// Adds bearer token authentication against an authority that publishes a bare key set.
+        /// Call before the protected endpoints run.
         /// </summary>
-        public static IAppBuilder UseEduPassAuthentication(
+        public static IAppBuilder UseJsonWebKeySetAuthentication(
             this IAppBuilder app,
-            EduPassAuthenticationOptions options)
+            JsonWebKeySetOptions options)
         {
             if (null == app)
             {
@@ -108,19 +107,20 @@ namespace Scim.EduPass
 
             options.Validate();
 
-            EduPassIssuerSecurityKeyProvider keyProvider =
-                new EduPassIssuerSecurityKeyProvider(options);
+            JsonWebKeySetIssuerSecurityKeyProvider keyProvider =
+                new JsonWebKeySetIssuerSecurityKeyProvider(options);
 
             TokenValidationParameters validationParameters =
-                EduPassKeySetRetriever.CreateValidationParameters(options);
+                JsonWebKeySetRetriever.CreateValidationParameters(options);
 
+            // UseOAuthBearerAuthentication rather than UseJwtBearerAuthentication: only the
+            // former accepts an AccessTokenFormat, which is how the validation parameters above
+            // get used. UseJwtBearerAuthentication builds its own format from AllowedAudiences
+            // plus the key providers, silently discarding the algorithm pin.
             app.UseOAuthBearerAuthentication(
                 new OAuthBearerAuthenticationOptions
                 {
-                    AccessTokenFormat =
-                        new JwtFormat(
-                            validationParameters,
-                            keyProvider),
+                    AccessTokenFormat = new JwtFormat(validationParameters, keyProvider),
                 });
 
             return app;

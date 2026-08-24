@@ -1,6 +1,6 @@
 // Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
 
-namespace Scim.EduPass
+namespace Anacle.ApiFramework.Authentication.Jwt
 {
     using System;
     using System.Threading;
@@ -10,26 +10,22 @@ namespace Scim.EduPass
     using Microsoft.IdentityModel.Tokens;
 
     /// <summary>
-    /// Fetches Edupass's JSON Web Key Set and presents it as an
+    /// Fetches a bare JSON Web Key Set and presents it as an
     /// <see cref="OpenIdConnectConfiguration"/>.
     /// </summary>
     /// <remarks>
-    /// Edupass publishes a bare JWKS at <c>/.well-known/keys</c>, not an OpenID Connect
-    /// discovery document, so <c>OpenIdConnectConfigurationRetriever</c> - the only retriever
-    /// Microsoft.IdentityModel ships - cannot read it. Wrapping the key set in an
-    /// <c>OpenIdConnectConfiguration</c> is what lets
-    /// <c>ConfigurationManager&lt;OpenIdConnectConfiguration&gt;</c> be used anyway, and that
-    /// class is worth reaching for: it brings caching, background refresh, last-known-good
-    /// configuration, and the <c>RequestRefresh</c> hook that key rotation needs.
-    ///
-    /// If Edupass ever also publishes <c>/.well-known/openid-configuration</c>, this type
-    /// becomes unnecessary - set <c>Authority</c> and delete it.
+    /// <c>OpenIdConnectConfigurationRetriever</c> - the only retriever Microsoft.IdentityModel
+    /// ships - reads a discovery document, so it cannot read an authority that publishes only
+    /// the key set. Wrapping the key set in an <c>OpenIdConnectConfiguration</c> is what allows
+    /// <c>ConfigurationManager</c> to be used anyway, and that class is worth reaching for: it
+    /// brings caching, background refresh, last-known-good configuration and the
+    /// <c>RequestRefresh</c> hook that key rotation needs. None of that is worth reimplementing.
     /// </remarks>
-    public class EduPassKeySetRetriever : IConfigurationRetriever<OpenIdConnectConfiguration>
+    public class JsonWebKeySetRetriever : IConfigurationRetriever<OpenIdConnectConfiguration>
     {
         private readonly string issuer;
 
-        public EduPassKeySetRetriever(string issuer)
+        public JsonWebKeySetRetriever(string issuer)
         {
             if (string.IsNullOrWhiteSpace(issuer))
             {
@@ -62,8 +58,8 @@ namespace Scim.EduPass
                     Issuer = this.issuer,
                     JwksUri = address,
 
-                    // Setting JsonWebKeySet populates SigningKeys, which is what the token
-                    // handler matches the JWT header's kid against.
+                    // Setting JsonWebKeySet populates the key set; SigningKeys below is what the
+                    // token handler matches the token header's key identifier against.
                     JsonWebKeySet = new JsonWebKeySet(document),
                 };
 
@@ -76,10 +72,11 @@ namespace Scim.EduPass
         }
 
         /// <summary>
-        /// A configuration manager over Edupass's key set, ready to hand to the JWT middleware.
+        /// A configuration manager over the authority's key set, ready to hand to the JWT
+        /// middleware on either hosting framework.
         /// </summary>
         public static ConfigurationManager<OpenIdConnectConfiguration> CreateConfigurationManager(
-            EduPassAuthenticationOptions options)
+            JsonWebKeySetOptions options)
         {
             if (null == options)
             {
@@ -91,8 +88,11 @@ namespace Scim.EduPass
             return
                 new ConfigurationManager<OpenIdConnectConfiguration>(
                     options.ResolveKeySetAddress(),
-                    new EduPassKeySetRetriever(options.Issuer),
-                    new HttpDocumentRetriever())
+                    new JsonWebKeySetRetriever(options.Issuer),
+                    new HttpDocumentRetriever
+                    {
+                        RequireHttps = options.RequireHttpsMetadata,
+                    })
                 {
                     AutomaticRefreshInterval = options.AutomaticRefreshInterval,
                     RefreshInterval = options.RefreshInterval,
@@ -100,12 +100,11 @@ namespace Scim.EduPass
         }
 
         /// <summary>
-        /// The validation rules the Edupass specification states: a valid ES256 signature from
-        /// the published key set, the expected <c>iss</c> and <c>aud</c>, and an unexpired
-        /// <c>exp</c>.
+        /// Validation parameters that check the signature against the published key set, the
+        /// expected issuer and audience, and the expiry.
         /// </summary>
         public static TokenValidationParameters CreateValidationParameters(
-            EduPassAuthenticationOptions options)
+            JsonWebKeySetOptions options)
         {
             if (null == options)
             {
@@ -121,16 +120,17 @@ namespace Scim.EduPass
                     ValidIssuer = options.Issuer,
 
                     ValidateAudience = true,
-                    ValidAudience = options.Audience,
+                    ValidAudiences = options.ResolveAudiences(),
 
                     ValidateLifetime = true,
                     ClockSkew = options.ClockSkew,
 
                     ValidateIssuerSigningKey = true,
 
-                    // Pinned to ES256: Edupass signs with it, and accepting anything else
-                    // would leave the endpoint open to an algorithm-substitution attempt.
-                    ValidAlgorithms = new[] { SecurityAlgorithms.EcdsaSha256 },
+                    // See JsonWebKeySetOptions.ValidAlgorithms: without this an attacker can
+                    // present a token signed with a symmetric algorithm keyed on the published
+                    // public key.
+                    ValidAlgorithms = options.ValidAlgorithms,
 
                     RequireSignedTokens = true,
                     RequireExpirationTime = true,
