@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
+﻿// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
 
 namespace Microsoft.SCIM
 {
@@ -12,7 +12,6 @@ namespace Microsoft.SCIM
     /// Bridges Microsoft.Extensions.DependencyInjection onto ASP.NET Web API's
     /// <see cref="IDependencyResolver"/>, so that both hosting legs register their SCIM
     /// dependencies with the same container and the same lines of code.
-    /// See MULTI-TARGET-PLAN.md D9.
     /// </summary>
     public sealed class ServiceProviderDependencyResolver : IDependencyResolver
     {

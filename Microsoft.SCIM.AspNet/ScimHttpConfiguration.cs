@@ -99,7 +99,7 @@ namespace Microsoft.SCIM
             // Attribute routes only. There is deliberately no conventional default route on
             // either leg: Web API's default shape (api/{controller}/{id}) does not match
             // ASP.NET Core's, and a fallback route is the largest single source of drift
-            // between the two. See MULTI-TARGET-PLAN.md D14a.
+            // between the two. See docs/scim-conformance.md section 5 item 4.
             //
             // ScimDirectRouteProvider rather than the default one so that the [Route]
             // attributes declared on ScimApiResourceControllerBase<T> are inherited by the
@@ -126,7 +126,7 @@ namespace Microsoft.SCIM
 
             // ASP.NET Core has no XML formatter, so Web API's would make
             // 'Accept: application/xml' return XML on net48 and 406 on net10 - an immediate
-            // parity break. See MULTI-TARGET-PLAN.md R7 and docs/scim-conformance.md X7.
+            // parity break. See docs/scim-conformance.md X7.
             configuration.Formatters.Remove(configuration.Formatters.XmlFormatter);
 
             configuration.Filters.Add(new ScimExceptionFilterAttribute());

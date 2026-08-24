@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
+﻿// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
 
 namespace Microsoft.SCIM
 {
@@ -23,8 +23,8 @@ namespace Microsoft.SCIM
     /// and the shared code only reads the method, URI and headers
     /// (<c>new ResourceQuery(request.RequestUri)</c>, <c>TryGetRequestIdentifier</c>,
     /// <c>IExtension.Supports</c>, <c>GetBaseResourceIdentifier</c>). See
-    /// MULTI-TARGET-PLAN.md section 2.9 and docs/scim-conformance.md section 5 item 8 for
-    /// the one accepted consequence, and for the two-line fix if it ever matters.
+    /// docs/scim-conformance.md section 5 item 8 for the one accepted consequence, and for
+    /// the two-line fix if it ever matters.
     /// </remarks>
     public static class HttpContextRequestConverter
     {

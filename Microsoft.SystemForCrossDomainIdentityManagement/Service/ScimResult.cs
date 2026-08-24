@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
+﻿// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
 
 namespace Microsoft.SCIM
 {
@@ -15,7 +15,7 @@ namespace Microsoft.SCIM
     /// frameworks' result types can be named from this assembly, so the handlers
     /// return this and each host translates it into its own action result. Keeping
     /// the translation to a few dozen lines per host is what keeps the two legs
-    /// from drifting apart - see MULTI-TARGET-PLAN.md D12.
+    /// from drifting apart.
     /// </remarks>
     public sealed class ScimResult
     {
@@ -72,7 +72,8 @@ namespace Microsoft.SCIM
         /// The location is computed once, by the caller, from
         /// <see cref="RequestExtensions.GetBaseResourceIdentifier"/> and
         /// <see cref="ProtocolExtensions.GetResourceIdentifier"/> - see
-        /// MULTI-TARGET-PLAN.md D15 for why it is no longer also derived from routing.
+        /// docs/scim-conformance.md section 5 item 2 for why it is no longer also derived
+        /// from routing.
         /// </summary>
         public static ScimResult Created(Resource resource, Uri location)
         {

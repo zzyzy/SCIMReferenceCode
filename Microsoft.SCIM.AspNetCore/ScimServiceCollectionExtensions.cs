@@ -51,7 +51,7 @@ namespace Microsoft.SCIM
         /// <c>AddApplicationPart</c> is load-bearing: the SCIM controllers live in this
         /// assembly, not in the entry assembly, and MVC only discovers controllers in
         /// application parts. Without it every SCIM route returns 404 while the host starts
-        /// up perfectly happily. See MULTI-TARGET-PLAN.md R3.
+        /// up perfectly happily.
         /// </remarks>
         /// <param name="suppressedControllerTypes">
         /// Controllers in this assembly that must not be discovered, so that a downstream
@@ -159,7 +159,7 @@ namespace Microsoft.SCIM
 
         /// <summary>
         /// Maps the SCIM attribute routes. There is deliberately no conventional-route
-        /// fallback on either hosting leg - see MULTI-TARGET-PLAN.md D14a.
+        /// fallback on either hosting leg - see docs/scim-conformance.md section 5 item 4.
         /// </summary>
         public static IEndpointRouteBuilder MapScim(this IEndpointRouteBuilder endpoints)
         {

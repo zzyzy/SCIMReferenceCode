@@ -1,4 +1,4 @@
-//------------------------------------------------------------
+﻿//------------------------------------------------------------
 // Copyright (c) Microsoft Corporation.  All rights reserved.
 //------------------------------------------------------------
 
@@ -36,7 +36,7 @@ namespace Microsoft.SCIM.WebHostSample
             }
 
             // Same variable name and the same appsettings layering as the net10.0 sample, so
-            // one set of docs and CI scripts covers both legs. See MULTI-TARGET-PLAN.md D8/D17.
+            // one set of docs and CI scripts covers both legs.
             string environmentName =
                 Environment.GetEnvironmentVariable(Startup.EnvironmentVariableName);
 
@@ -54,7 +54,7 @@ namespace Microsoft.SCIM.WebHostSample
             IProvider provider = new InMemoryProvider();
 
             // Identical registration lines to the net10.0 sample - that is the point of
-            // bridging MEDI onto Web API's IDependencyResolver. See MULTI-TARGET-PLAN.md D9.
+            // bridging MEDI onto Web API's IDependencyResolver.
             ServiceCollection services = new ServiceCollection();
             services.AddSingleton(typeof(IProvider), provider);
             services.AddLogging(builder => builder.AddConsole());

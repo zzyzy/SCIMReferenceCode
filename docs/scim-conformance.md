@@ -1,13 +1,13 @@
-# SCIM conformance specification
+﻿# SCIM conformance specification
 
 **Status:** acceptance criterion for the `net48` + `net10.0` multi-targeting port.
 **Authority:** RFC 7644 (protocol), RFC 7643 (core schema).
 **Scope:** both hosting legs — `Microsoft.SCIM.AspNet` (net48 / ASP.NET Web API 2) and
 `Microsoft.SCIM.AspNetCore` (net10.0 / ASP.NET Core MVC).
 
-This document replaces the "capture the current build's behaviour first" step that the port
-plan deliberately dropped (MULTI-TARGET-PLAN.md D18). Because there is no recorded baseline,
-**this table is the specification**: every row is derived from the RFCs and cross-checked
+The port deliberately dropped the "capture the current build's behaviour first" step, so
+there is no recorded pre-port baseline and **this table is the specification** instead: every
+row is derived from the RFCs and cross-checked
 against the assertions already present in `PostmanCollection.json` and
 `SCIM Inbound.postman_collection.json`.
 

@@ -1,4 +1,4 @@
-//------------------------------------------------------------
+﻿//------------------------------------------------------------
 // Copyright (c) Microsoft Corporation.  All rights reserved.
 //------------------------------------------------------------
 
@@ -92,8 +92,8 @@ namespace Microsoft.SCIM.WebHostSample
 
             // Deliberately no UseHsts() and no UseHttpsRedirection(): both samples are
             // HTTP-only dev harnesses so that the net48 and net10 legs can be compared
-            // like-for-like. TLS is the host's responsibility - see MULTI-TARGET-PLAN.md D20
-            // and docs/net48-hosting.md. The startup banner below says so out loud.
+            // like-for-like. TLS is the host's responsibility - see docs/net48-hosting.md.
+            // The startup banner below says so out loud.
             app.UseRouting();
             app.UseAuthentication();
             app.UseAuthorization();

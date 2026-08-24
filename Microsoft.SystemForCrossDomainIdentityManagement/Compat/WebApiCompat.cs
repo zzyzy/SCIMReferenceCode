@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
+﻿// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
 
 // ---------------------------------------------------------------------------
 // Compiled for net10.0 ONLY. On net48 this type comes from System.Web.Http.dll
@@ -13,8 +13,7 @@
 // provider implementation - needs no source changes at all.
 //
 // Yes, this squats on the System.Web.Http namespace. That is deliberate and is
-// confined to this single file. See MULTI-TARGET-PLAN.md D3 and D24, and
-// docs/net48-hosting.md.
+// confined to this single file. See docs/net48-hosting.md.
 //
 // Note that Compat/ contains ONLY HttpResponseException. There is no
 // FromUriAttribute shim: its single use site is rewritten per hosting framework

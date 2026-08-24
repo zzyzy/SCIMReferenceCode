@@ -19,7 +19,7 @@ namespace Microsoft.SCIM
     /// <remarks>
     /// This exists so that the ASP.NET Web API (net48) and ASP.NET Core (net10.0)
     /// controllers are thin adapters over one implementation rather than two copies
-    /// of the same 760 lines - see MULTI-TARGET-PLAN.md D12.
+    /// of the same 760 lines.
     ///
     /// Several paths deliberately <c>throw</c> rather than return a
     /// <see cref="ScimResult"/>. Each host must install an exception filter that maps
@@ -532,7 +532,8 @@ namespace Microsoft.SCIM
                 // RFC 7644 section 3.3: 201 with a single Location header naming the new
                 // resource. The pre-port code wrote Location twice - once by hand and once
                 // via CreatedAtAction, which derived a second URI from MVC routing that has
-                // no ASP.NET Web API equivalent. See MULTI-TARGET-PLAN.md D15.
+                // no ASP.NET Web API equivalent. See docs/scim-conformance.md section 5
+                // item 2.
                 Uri baseResourceIdentifier = request.GetBaseResourceIdentifier();
                 Uri location = result.GetResourceIdentifier(baseResourceIdentifier);
                 ScimRequestHandler<T>.EnsureMetadataLocation(request, result);

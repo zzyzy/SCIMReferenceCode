@@ -11,8 +11,7 @@ namespace Microsoft.SCIM.WebHostSample
     /// </summary>
     /// <remarks>
     /// Single-sourced deliberately: Microsoft.SCIM.WebHostSample.Net48 links this file rather
-    /// than copying it, so the two samples cannot end up warning about different things. See
-    /// MULTI-TARGET-PLAN.md D20 and D21.
+    /// than copying it, so the two samples cannot end up warning about different things.
     /// </remarks>
     public static class SampleStartupBanner
     {

@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
+﻿// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
 
 namespace Microsoft.SCIM
 {
@@ -62,7 +62,7 @@ namespace Microsoft.SCIM
     /// The verb surface for a SCIM resource endpoint. Routes, verbs and binding sources are
     /// carried over from <c>ControllerTemplate&lt;T&gt;</c> unchanged, except that
     /// <c>[FromUri]</c> becomes <c>[FromRoute]</c> - the net48 leg keeps the native
-    /// <c>[FromUri]</c>. See MULTI-TARGET-PLAN.md D24.
+    /// <c>[FromUri]</c>.
     /// </summary>
     public abstract class ScimResourceControllerBase<T> : ScimControllerBase where T : Resource
     {
