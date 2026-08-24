@@ -1,0 +1,256 @@
+import { randomUUID } from "node:crypto";
+import { describe, expect, it } from "vitest";
+import {
+  PATCH_APPLIED,
+  SCHEMA_GROUP,
+  createGroup,
+  createUser,
+  filterQuery,
+  groupBody,
+  memberIds,
+  patchOp,
+  readGroup,
+  scim,
+  unique,
+} from "../src/client.js";
+
+describe("Groups: lifecycle", () => {
+  it("creates, reads and deletes", async () => {
+    const created = await createGroup();
+
+    expect((await scim("GET", `/Groups/${created.id}`)).status).toBe(200);
+    expect((await scim("DELETE", `/Groups/${created.id}`)).status).toBe(204);
+    expect((await scim("GET", `/Groups/${created.id}`)).status).toBe(404);
+  });
+
+  it("refuses a duplicate displayName", async () => {
+    const created = await createGroup();
+    const again = await scim("POST", "/Groups", {
+      schemas: [SCHEMA_GROUP],
+      displayName: created.displayName,
+    });
+
+    expect(again.status).toBe(409);
+  });
+
+  it("refuses a body with no displayName", async () => {
+    expect((await scim("POST", "/Groups", { schemas: [SCHEMA_GROUP] })).status).toBe(400);
+  });
+
+  it("filters by displayName, which Edupass uses to find a role", async () => {
+    const created = await createGroup();
+    const response = await scim(
+      "GET",
+      `/Groups${filterQuery(`displayName eq "${created.displayName}"`)}`,
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body.Resources).toHaveLength(1);
+    expect(response.body.Resources[0].displayName).toBe(created.displayName);
+  });
+});
+
+describe("Groups: membership", () => {
+  it("adds a member and reads it back", async () => {
+    const group = await createGroup();
+    const user = await createUser();
+    const response = await scim(
+      "PATCH",
+      `/Groups/${group.id}`,
+      patchOp({ op: "add", path: "members", value: [{ value: user.id }] }),
+    );
+
+    expect(PATCH_APPLIED).toContain(response.status);
+    expect(await memberIds(group.id)).toContain(user.id);
+  });
+
+  it("treats a repeated add as a no-op rather than duplicating", async () => {
+    const group = await createGroup();
+    const user = await createUser();
+    const add = patchOp({ op: "add", path: "members", value: [{ value: user.id }] });
+
+    await scim("PATCH", `/Groups/${group.id}`, add);
+    const second = await scim("PATCH", `/Groups/${group.id}`, add);
+
+    expect(PATCH_APPLIED).toContain(second.status);
+    expect(await memberIds(group.id)).toEqual([user.id]);
+  });
+
+  it("removes one member by filter and leaves the rest", async () => {
+    const group = await createGroup();
+    const kept = await createUser();
+    const removed = await createUser();
+    await scim(
+      "PATCH",
+      `/Groups/${group.id}`,
+      patchOp({ op: "add", path: "members", value: [{ value: kept.id }, { value: removed.id }] }),
+    );
+
+    const response = await scim(
+      "PATCH",
+      `/Groups/${group.id}`,
+      patchOp({ op: "remove", path: `members[value eq "${removed.id}"]` }),
+    );
+
+    expect(PATCH_APPLIED).toContain(response.status);
+    expect(await memberIds(group.id)).toEqual([kept.id]);
+  });
+
+  it("replaces the membership wholesale, which is the full sync", async () => {
+    // Regression: the members case handled only Add and Remove, so a Replace fell
+    // through the switch while the service still answered 204 - a sync that
+    // silently did nothing.
+    const group = await createGroup();
+    const before = await createUser();
+    const after = await createUser();
+    await scim(
+      "PATCH",
+      `/Groups/${group.id}`,
+      patchOp({ op: "add", path: "members", value: [{ value: before.id }] }),
+    );
+
+    const response = await scim(
+      "PATCH",
+      `/Groups/${group.id}`,
+      patchOp({ op: "replace", path: "members", value: [{ value: after.id }] }),
+    );
+
+    expect(PATCH_APPLIED).toContain(response.status);
+    expect(await memberIds(group.id)).toEqual([after.id]);
+  });
+
+  it("removes every member on a valueless remove", async () => {
+    const group = await createGroup();
+    const user = await createUser();
+    await scim(
+      "PATCH",
+      `/Groups/${group.id}`,
+      patchOp({ op: "add", path: "members", value: [{ value: user.id }] }),
+    );
+
+    const response = await scim(
+      "PATCH",
+      `/Groups/${group.id}`,
+      patchOp({ op: "remove", path: "members" }),
+    );
+
+    expect(PATCH_APPLIED).toContain(response.status);
+    expect(await memberIds(group.id)).toEqual([]);
+  });
+
+  it("treats removing a user who is not a member as a no-op success", async () => {
+    const group = await createGroup();
+    // A well-formed identifier that simply is not a member. unique() returns a dotted
+    // token, which makes the path filter itself malformed - that would test the path
+    // parser rather than the no-op the specification asks for.
+    const stranger = randomUUID();
+    const response = await scim(
+      "PATCH",
+      `/Groups/${group.id}`,
+      patchOp({ op: "remove", path: `members[value eq "${stranger}"]` }),
+    );
+
+    expect(PATCH_APPLIED).toContain(response.status);
+  });
+
+  it("answers 404 for a PATCH against a group that does not exist", async () => {
+    const user = await createUser();
+    const response = await scim(
+      "PATCH",
+      `/Groups/${unique("ghost")}`,
+      patchOp({ op: "add", path: "members", value: [{ value: user.id }] }),
+    );
+
+    expect(response.status).toBe(404);
+  });
+
+  it("takes many members in one operation and removes one of them", async () => {
+    const group = await createGroup();
+    const users: string[] = [];
+    for (let index = 0; index < 20; index += 1) {
+      users.push((await createUser()).id);
+    }
+
+    const add = await scim(
+      "PATCH",
+      `/Groups/${group.id}`,
+      patchOp({ op: "add", path: "members", value: users.map((value) => ({ value })) }),
+    );
+    expect(PATCH_APPLIED).toContain(add.status);
+    expect(await memberIds(group.id)).toHaveLength(20);
+
+    await scim(
+      "PATCH",
+      `/Groups/${group.id}`,
+      patchOp({ op: "remove", path: `members[value eq "${users[0]}"]` }),
+    );
+    expect(await memberIds(group.id)).toHaveLength(19);
+  });
+});
+
+describe("Groups: rename", () => {
+  it("renames through PATCH", async () => {
+    const group = await createGroup();
+    const name = unique("renamed");
+    const response = await scim(
+      "PATCH",
+      `/Groups/${group.id}`,
+      patchOp({ op: "replace", path: "displayName", value: name }),
+    );
+
+    expect(PATCH_APPLIED).toContain(response.status);
+    expect((await readGroup(group.id)).displayName).toBe(name);
+  });
+
+  it("refuses a rename onto another group's displayName", async () => {
+    // Regression: create and replace enforced uniqueness, PATCH did not - so two
+    // groups could end up sharing the name a relying party uses to identify a role.
+    const first = await createGroup();
+    const second = await createGroup();
+
+    const response = await scim(
+      "PATCH",
+      `/Groups/${second.id}`,
+      patchOp({ op: "replace", path: "displayName", value: first.displayName }),
+    );
+
+    expect(response.status).toBe(409);
+    expect((await readGroup(second.id)).displayName).toBe(second.displayName);
+  });
+
+  it("applies a displayName change and a membership change in one request", async () => {
+    const group = await createGroup();
+    const user = await createUser();
+    const name = unique("both");
+
+    const response = await scim(
+      "PATCH",
+      `/Groups/${group.id}`,
+      patchOp(
+        { op: "replace", path: "displayName", value: name },
+        { op: "add", path: "members", value: [{ value: user.id }] },
+      ),
+    );
+
+    expect(PATCH_APPLIED).toContain(response.status);
+    const after = await readGroup(group.id);
+    expect(after.displayName).toBe(name);
+    expect(await memberIds(group.id)).toEqual([user.id]);
+  });
+
+  it("replaces a group through PUT", async () => {
+    const group = await createGroup();
+    const response = await scim("PUT", `/Groups/${group.id}`, groupBody({ id: group.id }));
+
+    expect(response.status).toBe(200);
+  });
+
+  it("projects a group response", async () => {
+    const group = await createGroup();
+    const response = await scim("GET", `/Groups/${group.id}?attributes=displayName`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toHaveProperty("displayName");
+    expect(response.body).not.toHaveProperty("members");
+  });
+});

@@ -340,3 +340,6 @@ Log/
 !Microsoft.SCIM.WebHostSample/Properties/launchSettings.json
 
 .claude/settings.local.json
+# Integration tests (tests/integration)
+node_modules/
+integration-coverage.xml

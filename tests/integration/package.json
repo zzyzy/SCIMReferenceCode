@@ -1,0 +1,20 @@
+{
+  "name": "scim-integration-tests",
+  "private": true,
+  "type": "module",
+  "description": "Integration tests for the SCIM reference endpoints, run against a live host.",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "cross-env SCIM_COVERAGE=1 vitest run",
+    "test:net48": "cross-env SCIM_LEG=net48 vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "cross-env": "^7.0.3",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11"
+  },
+  "packageManager": "pnpm@11.10.0"
+}
