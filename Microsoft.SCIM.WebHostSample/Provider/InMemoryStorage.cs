@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
+﻿// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
 
 namespace Microsoft.SCIM.WebHostSample.Provider
 {
@@ -12,6 +12,20 @@ namespace Microsoft.SCIM.WebHostSample.Provider
     {
         internal readonly IDictionary<string, Core2Group> Groups;
         internal readonly IDictionary<string, Core2EnterpriseUser> Users;
+
+        /// <summary>
+        /// Guards both dictionaries.
+        /// </summary>
+        /// <remarks>
+        /// One lock rather than one per collection: a group's members reference users, so an
+        /// operation can legitimately need both, and two locks would invite taking them in
+        /// different orders. Plain Dictionary is not safe for concurrent writes at all - not
+        /// merely lossy, but corrupting, which the runtime detects and reports as
+        /// "a concurrent update was performed on this collection". Uniqueness is also a
+        /// check-then-insert, so the test and the write have to be inside the same lock or two
+        /// callers can both pass the test.
+        /// </remarks>
+        internal readonly object SyncRoot = new object();
 
         private InMemoryStorage()
         {

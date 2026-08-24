@@ -62,7 +62,15 @@ namespace Microsoft.SCIM
             {
                 if (!Enum.TryParse(value, true, out this.name))
                 {
-                    throw new NotSupportedException();
+                    // ArgumentException, not NotSupportedException: the handler maps the latter
+                    // to 501, so an unrecognised op read as an unimplemented feature on net48
+                    // while net10.0 rejected it during binding with 400. RFC 7644 section 3.5.2
+                    // defines the set of verbs; anything else is a malformed request.
+                    throw new ArgumentException(
+                        string.Format(
+                            CultureInfo.InvariantCulture,
+                            SystemForCrossDomainIdentityManagementProtocolResources.ExceptionInvalidOperatorTemplate,
+                            value));
                 }
 
                 this.operationName = value;

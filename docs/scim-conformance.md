@@ -87,6 +87,9 @@ and once against `scim/Groups` with `Core2Group` payloads.
 | U36 | `PUT /{id}` whose body `id` names a different resource | **400** | — | `Core2Error` with `scimType` `mutability` | RFC 7644 §3.5.1, §3.12 |
 | U37 | `PUT` / `PATCH` / `DELETE` on a collection URI (`scim/Users`) | **405** | — | — | **parity fix, see §5 item 16** |
 | U38 | `GET scim/ServiceProviderConfig` | **200** | — | includes `etag`, spelled in lower case | RFC 7643 §5 — **fixed, see §5 item 14** |
+| U39 | `PATCH` carrying an unrecognised `op` verb | **400** | — | `Core2Error` | RFC 7644 §3.5.2 — **parity fix, see §5 item 17** |
+| U40 | `POST` a body repeating a schema URN | **201** | — | `schemas` lists it once | RFC 7643 §3 — **fixed, see §5 item 17** |
+| U41 | Concurrent `POST` of one `userName` | **201** once, **409** for the rest | — | one resource in the store | RFC 7643 §4.1.1 — **fixed, see §5 item 18** |
 
 > **Note on U31-U33.** All three previously answered success while doing nothing. U31 meant a
 > full Group membership sync silently applied no change; U32 meant no attribute could be removed
@@ -280,6 +283,22 @@ against the `netcoreapp3.1` build should expect exactly these differences and no
     the last candidate standing on ASP.NET Core, so `PUT scim/Users` reached the service root as
     a resource named "Users" and answered 415 or 400 where net48 answered 405. The service
     root's identifier is now constrained so that it cannot match a collection segment.
+17. **An unrecognised PATCH `op` is 400 on both legs, and a repeated schema URN is stored once**
+    (rows U39, U40). `PatchOperation2Base` threw `NotSupportedException` for an unknown verb,
+    which the handler maps to 501 - so net48 reported an unimplemented feature where net10.0
+    rejected the request during binding with 400. It now throws `ArgumentException`. Separately,
+    `AddSchema` has always refused duplicates, but deserialization fills the backing list
+    directly and never passes through it, so a body repeating a URN kept it; `Schematized`
+    now collapses duplicates once deserialization is complete.
+18. **The reference provider survives concurrent writes** (row U41). `InMemoryUserProvider` and
+    `InMemoryGroupProvider` tested uniqueness with `Any(...)` and then called `Dictionary.Add`,
+    with nothing holding the two together and nothing synchronising the dictionary. Ten
+    simultaneous creates of one `userName` produced up to three 201s, and the runtime reported
+    the dictionary's internal state corrupted, which surfaced as 500. Reproduced in 6 of 8
+    trials on net10.0 and 3 of 8 on net48; 0 of 48 after the fix. Both providers now take a
+    single lock published by `InMemoryStorage` - one for both collections, because a group's
+    members reference users and two locks would invite lock-order inversion. This was the
+    sample, not the library, but the sample is what integrators copy.
 
 ---
 

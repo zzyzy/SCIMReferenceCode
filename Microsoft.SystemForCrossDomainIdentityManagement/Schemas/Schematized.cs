@@ -86,6 +86,28 @@ namespace Microsoft.SCIM
         private void OnDeserialized(StreamingContext context)
         {
             this.OnInitialized();
+
+            // schemas is a set of URIs (RFC 7643 section 3), but deserialization fills the
+            // backing list directly and so never passes through AddSchema, which is where the
+            // duplicate check lives. A body repeating a URI was stored and echoed back with it
+            // repeated.
+            if (null != this.schemas && this.schemas.Count > 1)
+            {
+                List<string> distinct = new List<string>(this.schemas.Count);
+                foreach (string identifier in this.schemas)
+                {
+                    if (!distinct.Any((string item) => string.Equals(item, identifier, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        distinct.Add(identifier);
+                    }
+                }
+
+                if (distinct.Count != this.schemas.Count)
+                {
+                    this.schemas.Clear();
+                    this.schemas.AddRange(distinct);
+                }
+            }
         }
 
         [OnDeserializing]

@@ -22,353 +22,371 @@ namespace Microsoft.SCIM.WebHostSample.Provider
 
         public override Task<Resource> CreateAsync(Resource resource, string correlationIdentifier)
         {
-            if (resource.Identifier != null)
+            lock (this.storage.SyncRoot)
             {
-                throw new HttpResponseException(HttpStatusCode.BadRequest);
-            }
+                if (resource.Identifier != null)
+                {
+                    throw new HttpResponseException(HttpStatusCode.BadRequest);
+                }
 
-            Core2EnterpriseUser user = resource as Core2EnterpriseUser;
-            if (string.IsNullOrWhiteSpace(user.UserName))
-            {
-                throw new HttpResponseException(HttpStatusCode.BadRequest);
-            }
+                Core2EnterpriseUser user = resource as Core2EnterpriseUser;
+                if (string.IsNullOrWhiteSpace(user.UserName))
+                {
+                    throw new HttpResponseException(HttpStatusCode.BadRequest);
+                }
 
-            IEnumerable<Core2EnterpriseUser> exisitingUsers = this.storage.Users.Values;
-            if
-            (
-                exisitingUsers.Any(
-                    (Core2EnterpriseUser exisitingUser) =>
-                        string.Equals(exisitingUser.UserName, user.UserName, StringComparison.Ordinal))
-            )
-            {
-                throw new HttpResponseException(HttpStatusCode.Conflict);
-            }
+                IEnumerable<Core2EnterpriseUser> exisitingUsers = this.storage.Users.Values;
+                if
+                (
+                    exisitingUsers.Any(
+                        (Core2EnterpriseUser exisitingUser) =>
+                            string.Equals(exisitingUser.UserName, user.UserName, StringComparison.Ordinal))
+                )
+                {
+                    throw new HttpResponseException(HttpStatusCode.Conflict);
+                }
 
-            // Update metadata
-            DateTime created = DateTime.UtcNow;
-            user.Metadata.Created = created;
-            user.Metadata.LastModified = created; 
+                // Update metadata
+                DateTime created = DateTime.UtcNow;
+                user.Metadata.Created = created;
+                user.Metadata.LastModified = created; 
             
-            string resourceIdentifier = Guid.NewGuid().ToString();
-            resource.Identifier = resourceIdentifier;
-            this.storage.Users.Add(resourceIdentifier, user);
+                string resourceIdentifier = Guid.NewGuid().ToString();
+                resource.Identifier = resourceIdentifier;
+                this.storage.Users.Add(resourceIdentifier, user);
 
-            return Task.FromResult(resource);
+                return Task.FromResult(resource);
+            }
         }
 
         public override Task DeleteAsync(IResourceIdentifier resourceIdentifier, string correlationIdentifier)
         {
-            if (string.IsNullOrWhiteSpace(resourceIdentifier?.Identifier))
+            lock (this.storage.SyncRoot)
             {
-                throw new HttpResponseException(HttpStatusCode.BadRequest);
+                if (string.IsNullOrWhiteSpace(resourceIdentifier?.Identifier))
+                {
+                    throw new HttpResponseException(HttpStatusCode.BadRequest);
+                }
+
+                string identifier = resourceIdentifier.Identifier;
+
+                if (this.storage.Users.ContainsKey(identifier))
+                {
+                    this.storage.Users.Remove(identifier);
+                }
+
+                return Task.CompletedTask;
             }
-
-            string identifier = resourceIdentifier.Identifier;
-
-            if (this.storage.Users.ContainsKey(identifier))
-            {
-                this.storage.Users.Remove(identifier);
-            }
-
-            return Task.CompletedTask;
         }
 
         public override Task<Resource[]> QueryAsync(IQueryParameters parameters, string correlationIdentifier)
         {
-            if (parameters == null)
+            lock (this.storage.SyncRoot)
             {
-                throw new ArgumentNullException(nameof(parameters));
-            }
-
-            if (string.IsNullOrWhiteSpace(correlationIdentifier))
-            {
-                throw new ArgumentNullException(nameof(correlationIdentifier));
-            }
-
-            if (null == parameters.AlternateFilters)
-            {
-                throw new ArgumentException(SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidParameters);
-            }
-
-            if (string.IsNullOrWhiteSpace(parameters.SchemaIdentifier))
-            {
-                throw new ArgumentException(SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidParameters);
-            }
-
-            IEnumerable<Resource> results;
-            var predicate = PredicateBuilder.False<Core2EnterpriseUser>();
-            Expression<Func<Core2EnterpriseUser, bool>> predicateAnd;
-
-
-            if (parameters.AlternateFilters.Count <= 0)
-            {
-                results = this.storage.Users.Values.Select(
-                    (Core2EnterpriseUser user) => user as Resource);
-            }
-            else
-            {
-
-                foreach (IFilter queryFilter in parameters.AlternateFilters)
+                if (parameters == null)
                 {
-                    predicateAnd = PredicateBuilder.True<Core2EnterpriseUser>();
+                    throw new ArgumentNullException(nameof(parameters));
+                }
 
-                    IFilter andFilter = queryFilter;
-                    IFilter currentFilter = andFilter;
-                    do
+                if (string.IsNullOrWhiteSpace(correlationIdentifier))
+                {
+                    throw new ArgumentNullException(nameof(correlationIdentifier));
+                }
+
+                if (null == parameters.AlternateFilters)
+                {
+                    throw new ArgumentException(SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidParameters);
+                }
+
+                if (string.IsNullOrWhiteSpace(parameters.SchemaIdentifier))
+                {
+                    throw new ArgumentException(SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidParameters);
+                }
+
+                IEnumerable<Resource> results;
+                var predicate = PredicateBuilder.False<Core2EnterpriseUser>();
+                Expression<Func<Core2EnterpriseUser, bool>> predicateAnd;
+
+
+                if (parameters.AlternateFilters.Count <= 0)
+                {
+                    results = this.storage.Users.Values.Select(
+                        (Core2EnterpriseUser user) => user as Resource);
+                }
+                else
+                {
+
+                    foreach (IFilter queryFilter in parameters.AlternateFilters)
                     {
-                        if (string.IsNullOrWhiteSpace(andFilter.AttributePath))
-                        {
-                            throw new ArgumentException(SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidParameters);
-                        }
+                        predicateAnd = PredicateBuilder.True<Core2EnterpriseUser>();
 
-                        else if (string.IsNullOrWhiteSpace(andFilter.ComparisonValue))
+                        IFilter andFilter = queryFilter;
+                        IFilter currentFilter = andFilter;
+                        do
                         {
-                            throw new ArgumentException(SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidParameters);
-                        }
-
-                        // UserName filter
-                        else if (andFilter.AttributePath.Equals(AttributeNames.UserName, StringComparison.OrdinalIgnoreCase))
-                        {
-                            string userName = andFilter.ComparisonValue;
-
-                            // eq, co and sw. Entra ID looks a user up by userName before
-                            // deciding whether to create them, and uses all three.
-                            switch (andFilter.FilterOperator)
+                            if (string.IsNullOrWhiteSpace(andFilter.AttributePath))
                             {
-                                case ComparisonOperator.Equals:
-                                    predicateAnd = predicateAnd.And(p => string.Equals(p.UserName, userName, StringComparison.OrdinalIgnoreCase));
-                                    break;
+                                throw new ArgumentException(SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidParameters);
+                            }
 
-                                case ComparisonOperator.Contains:
-                                    predicateAnd = predicateAnd.And(p => p.UserName != null && p.UserName.IndexOf(userName, StringComparison.OrdinalIgnoreCase) >= 0);
-                                    break;
+                            else if (string.IsNullOrWhiteSpace(andFilter.ComparisonValue))
+                            {
+                                throw new ArgumentException(SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidParameters);
+                            }
 
-                                case ComparisonOperator.StartsWith:
-                                    predicateAnd = predicateAnd.And(p => p.UserName != null && p.UserName.StartsWith(userName, StringComparison.OrdinalIgnoreCase));
-                                    break;
+                            // UserName filter
+                            else if (andFilter.AttributePath.Equals(AttributeNames.UserName, StringComparison.OrdinalIgnoreCase))
+                            {
+                                string userName = andFilter.ComparisonValue;
 
-                                case ComparisonOperator.EndsWith:
-                                    predicateAnd = predicateAnd.And(p => p.UserName != null && p.UserName.EndsWith(userName, StringComparison.OrdinalIgnoreCase));
-                                    break;
+                                // eq, co and sw. Entra ID looks a user up by userName before
+                                // deciding whether to create them, and uses all three.
+                                switch (andFilter.FilterOperator)
+                                {
+                                    case ComparisonOperator.Equals:
+                                        predicateAnd = predicateAnd.And(p => string.Equals(p.UserName, userName, StringComparison.OrdinalIgnoreCase));
+                                        break;
 
-                                case ComparisonOperator.NotEquals:
-                                    predicateAnd = predicateAnd.And(p => !string.Equals(p.UserName, userName, StringComparison.OrdinalIgnoreCase));
-                                    break;
+                                    case ComparisonOperator.Contains:
+                                        predicateAnd = predicateAnd.And(p => p.UserName != null && p.UserName.IndexOf(userName, StringComparison.OrdinalIgnoreCase) >= 0);
+                                        break;
 
-                                default:
+                                    case ComparisonOperator.StartsWith:
+                                        predicateAnd = predicateAnd.And(p => p.UserName != null && p.UserName.StartsWith(userName, StringComparison.OrdinalIgnoreCase));
+                                        break;
+
+                                    case ComparisonOperator.EndsWith:
+                                        predicateAnd = predicateAnd.And(p => p.UserName != null && p.UserName.EndsWith(userName, StringComparison.OrdinalIgnoreCase));
+                                        break;
+
+                                    case ComparisonOperator.NotEquals:
+                                        predicateAnd = predicateAnd.And(p => !string.Equals(p.UserName, userName, StringComparison.OrdinalIgnoreCase));
+                                        break;
+
+                                    default:
+                                        throw new NotSupportedException(
+                                            string.Format(SystemForCrossDomainIdentityManagementServiceResources.ExceptionFilterOperatorNotSupportedTemplate, andFilter.FilterOperator));
+                                }
+                            }
+
+                            // ExternalId filter
+                            else if (andFilter.AttributePath.Equals(AttributeNames.ExternalIdentifier, StringComparison.OrdinalIgnoreCase))
+                            {
+                                if (andFilter.FilterOperator != ComparisonOperator.Equals)
+                                {
                                     throw new NotSupportedException(
                                         string.Format(SystemForCrossDomainIdentityManagementServiceResources.ExceptionFilterOperatorNotSupportedTemplate, andFilter.FilterOperator));
-                            }
-                        }
+                                }
 
-                        // ExternalId filter
-                        else if (andFilter.AttributePath.Equals(AttributeNames.ExternalIdentifier, StringComparison.OrdinalIgnoreCase))
-                        {
-                            if (andFilter.FilterOperator != ComparisonOperator.Equals)
-                            {
-                                throw new NotSupportedException(
-                                    string.Format(SystemForCrossDomainIdentityManagementServiceResources.ExceptionFilterOperatorNotSupportedTemplate, andFilter.FilterOperator));
-                            }
-
-                            string externalIdentifier = andFilter.ComparisonValue;
-                            predicateAnd = predicateAnd.And(p => string.Equals(p.ExternalIdentifier, externalIdentifier, StringComparison.OrdinalIgnoreCase));
+                                string externalIdentifier = andFilter.ComparisonValue;
+                                predicateAnd = predicateAnd.And(p => string.Equals(p.ExternalIdentifier, externalIdentifier, StringComparison.OrdinalIgnoreCase));
 
                            
-                        }
-
-                        //Active Filter
-                        else if (andFilter.AttributePath.Equals(AttributeNames.Active, StringComparison.OrdinalIgnoreCase))
-                        {
-                            if (andFilter.FilterOperator != ComparisonOperator.Equals)
-                            {
-                                throw new NotSupportedException(
-                                    string.Format(SystemForCrossDomainIdentityManagementServiceResources.ExceptionFilterOperatorNotSupportedTemplate, andFilter.FilterOperator));
                             }
 
-                            bool active = bool.Parse(andFilter.ComparisonValue);
-                            predicateAnd = predicateAnd.And(p => p.Active == active);
+                            //Active Filter
+                            else if (andFilter.AttributePath.Equals(AttributeNames.Active, StringComparison.OrdinalIgnoreCase))
+                            {
+                                if (andFilter.FilterOperator != ComparisonOperator.Equals)
+                                {
+                                    throw new NotSupportedException(
+                                        string.Format(SystemForCrossDomainIdentityManagementServiceResources.ExceptionFilterOperatorNotSupportedTemplate, andFilter.FilterOperator));
+                                }
 
-                        }
+                                bool active = bool.Parse(andFilter.ComparisonValue);
+                                predicateAnd = predicateAnd.And(p => p.Active == active);
 
-                        //LastModified filter
-                        else if (andFilter.AttributePath.Equals($"{AttributeNames.Metadata}.{AttributeNames.LastModified}", StringComparison.OrdinalIgnoreCase))
-                        {
-                            if (andFilter.FilterOperator == ComparisonOperator.GreaterThan)
-                            {
-                                DateTime comparisonValue = DateTime.Parse(andFilter.ComparisonValue).ToUniversalTime();
-                                predicateAnd = predicateAnd.And(p => p.Metadata.LastModified > comparisonValue);
                             }
-                            else if (andFilter.FilterOperator == ComparisonOperator.LessThan)
+
+                            //LastModified filter
+                            else if (andFilter.AttributePath.Equals($"{AttributeNames.Metadata}.{AttributeNames.LastModified}", StringComparison.OrdinalIgnoreCase))
                             {
-                                DateTime comparisonValue = DateTime.Parse(andFilter.ComparisonValue).ToUniversalTime();
-                                predicateAnd = predicateAnd.And(p => p.Metadata.LastModified < comparisonValue);
-                            }
-                            else if (andFilter.FilterOperator == ComparisonOperator.EqualOrGreaterThan)
-                            {
-                                DateTime comparisonValue = DateTime.Parse(andFilter.ComparisonValue).ToUniversalTime();
-                                predicateAnd = predicateAnd.And(p => p.Metadata.LastModified >= comparisonValue);
+                                if (andFilter.FilterOperator == ComparisonOperator.GreaterThan)
+                                {
+                                    DateTime comparisonValue = DateTime.Parse(andFilter.ComparisonValue).ToUniversalTime();
+                                    predicateAnd = predicateAnd.And(p => p.Metadata.LastModified > comparisonValue);
+                                }
+                                else if (andFilter.FilterOperator == ComparisonOperator.LessThan)
+                                {
+                                    DateTime comparisonValue = DateTime.Parse(andFilter.ComparisonValue).ToUniversalTime();
+                                    predicateAnd = predicateAnd.And(p => p.Metadata.LastModified < comparisonValue);
+                                }
+                                else if (andFilter.FilterOperator == ComparisonOperator.EqualOrGreaterThan)
+                                {
+                                    DateTime comparisonValue = DateTime.Parse(andFilter.ComparisonValue).ToUniversalTime();
+                                    predicateAnd = predicateAnd.And(p => p.Metadata.LastModified >= comparisonValue);
 
                                
-                            }
-                            else if (andFilter.FilterOperator == ComparisonOperator.EqualOrLessThan)
-                            {
-                                DateTime comparisonValue = DateTime.Parse(andFilter.ComparisonValue).ToUniversalTime();
-                                predicateAnd = predicateAnd.And(p => p.Metadata.LastModified <= comparisonValue);
+                                }
+                                else if (andFilter.FilterOperator == ComparisonOperator.EqualOrLessThan)
+                                {
+                                    DateTime comparisonValue = DateTime.Parse(andFilter.ComparisonValue).ToUniversalTime();
+                                    predicateAnd = predicateAnd.And(p => p.Metadata.LastModified <= comparisonValue);
 
                                 
+                                }
+                                else
+                                    throw new NotSupportedException(
+                                        string.Format(SystemForCrossDomainIdentityManagementServiceResources.ExceptionFilterOperatorNotSupportedTemplate, andFilter.FilterOperator));
+
+
+
                             }
                             else
                                 throw new NotSupportedException(
-                                    string.Format(SystemForCrossDomainIdentityManagementServiceResources.ExceptionFilterOperatorNotSupportedTemplate, andFilter.FilterOperator));
+                                    string.Format(SystemForCrossDomainIdentityManagementServiceResources.ExceptionFilterAttributePathNotSupportedTemplate, andFilter.AttributePath));
 
+                            currentFilter = andFilter;
+                            andFilter = andFilter.AdditionalFilter;
 
+                        } while (currentFilter.AdditionalFilter != null);
 
-                        }
-                        else
-                            throw new NotSupportedException(
-                                string.Format(SystemForCrossDomainIdentityManagementServiceResources.ExceptionFilterAttributePathNotSupportedTemplate, andFilter.AttributePath));
+                        predicate = predicate.Or(predicateAnd);
 
-                        currentFilter = andFilter;
-                        andFilter = andFilter.AdditionalFilter;
+                    }
 
-                    } while (currentFilter.AdditionalFilter != null);
-
-                    predicate = predicate.Or(predicateAnd);
-
+                    results = this.storage.Users.Values.Where(predicate.Compile());
                 }
 
-                results = this.storage.Users.Values.Where(predicate.Compile());
+                // Every match, not a page: ProviderBase.PaginateQueryAsync applies startIndex and
+                // count, and needs the full match count to report totalResults. Paging here as well
+                // reported the page size as the total, and ignored startIndex entirely.
+                return Task.FromResult(results.ToArray());
             }
-
-            // Every match, not a page: ProviderBase.PaginateQueryAsync applies startIndex and
-            // count, and needs the full match count to report totalResults. Paging here as well
-            // reported the page size as the total, and ignored startIndex entirely.
-            return Task.FromResult(results.ToArray());
         }
 
         public override Task<Resource> ReplaceAsync(Resource resource, string correlationIdentifier)
         {
-            if (resource.Identifier == null)
+            lock (this.storage.SyncRoot)
             {
-                throw new HttpResponseException(HttpStatusCode.BadRequest);
+                if (resource.Identifier == null)
+                {
+                    throw new HttpResponseException(HttpStatusCode.BadRequest);
+                }
+
+                Core2EnterpriseUser user = resource as Core2EnterpriseUser;
+
+                if (string.IsNullOrWhiteSpace(user.UserName))
+                {
+                    throw new HttpResponseException(HttpStatusCode.BadRequest);
+                }
+
+                if
+                (
+                    this.storage.Users.Values.Any(
+                        (Core2EnterpriseUser exisitingUser) =>
+                            string.Equals(exisitingUser.UserName, user.UserName, StringComparison.Ordinal) &&
+                            !string.Equals(exisitingUser.Identifier, user.Identifier, StringComparison.OrdinalIgnoreCase))
+                )
+                {
+                    throw new HttpResponseException(HttpStatusCode.Conflict);
+                }
+
+                Core2EnterpriseUser exisitingUser = this.storage.Users.Values
+                    .FirstOrDefault(
+                        (Core2EnterpriseUser exisitingUser) =>
+                            string.Equals(exisitingUser.Identifier, user.Identifier, StringComparison.OrdinalIgnoreCase)
+                    );
+                if (exisitingUser == null)
+                {
+                    throw new HttpResponseException(HttpStatusCode.NotFound);
+                }
+
+                // Update metadata
+                user.Metadata.Created = exisitingUser.Metadata.Created;
+                user.Metadata.LastModified = DateTime.UtcNow;
+
+                this.storage.Users[user.Identifier] = user;
+                Resource result = user as Resource;
+                return Task.FromResult(result);
             }
-
-            Core2EnterpriseUser user = resource as Core2EnterpriseUser;
-
-            if (string.IsNullOrWhiteSpace(user.UserName))
-            {
-                throw new HttpResponseException(HttpStatusCode.BadRequest);
-            }
-
-            if
-            (
-                this.storage.Users.Values.Any(
-                    (Core2EnterpriseUser exisitingUser) =>
-                        string.Equals(exisitingUser.UserName, user.UserName, StringComparison.Ordinal) &&
-                        !string.Equals(exisitingUser.Identifier, user.Identifier, StringComparison.OrdinalIgnoreCase))
-            )
-            {
-                throw new HttpResponseException(HttpStatusCode.Conflict);
-            }
-
-            Core2EnterpriseUser exisitingUser = this.storage.Users.Values
-                .FirstOrDefault(
-                    (Core2EnterpriseUser exisitingUser) =>
-                        string.Equals(exisitingUser.Identifier, user.Identifier, StringComparison.OrdinalIgnoreCase)
-                );
-            if (exisitingUser == null)
-            {
-                throw new HttpResponseException(HttpStatusCode.NotFound);
-            }
-
-            // Update metadata
-            user.Metadata.Created = exisitingUser.Metadata.Created;
-            user.Metadata.LastModified = DateTime.UtcNow;
-
-            this.storage.Users[user.Identifier] = user;
-            Resource result = user as Resource;
-            return Task.FromResult(result);
         }
 
         public override Task<Resource> RetrieveAsync(IResourceRetrievalParameters parameters, string correlationIdentifier)
         {
-            if (parameters == null)
+            lock (this.storage.SyncRoot)
             {
-                throw new ArgumentNullException(nameof(parameters));
-            }
-
-            if (string.IsNullOrWhiteSpace(correlationIdentifier))
-            {
-                throw new ArgumentNullException(nameof(correlationIdentifier));
-            }
-
-            if (string.IsNullOrEmpty(parameters?.ResourceIdentifier?.Identifier))
-            {
-                throw new ArgumentNullException(nameof(parameters));
-            }
-
-            Resource result = null;
-            string identifier = parameters.ResourceIdentifier.Identifier;
-
-            if (this.storage.Users.ContainsKey(identifier))
-            {
-                if (this.storage.Users.TryGetValue(identifier, out Core2EnterpriseUser user))
+                if (parameters == null)
                 {
-                    result = user as Resource;
-                    return Task.FromResult(result);
+                    throw new ArgumentNullException(nameof(parameters));
                 }
-            }
 
-            throw new HttpResponseException(HttpStatusCode.NotFound);
+                if (string.IsNullOrWhiteSpace(correlationIdentifier))
+                {
+                    throw new ArgumentNullException(nameof(correlationIdentifier));
+                }
+
+                if (string.IsNullOrEmpty(parameters?.ResourceIdentifier?.Identifier))
+                {
+                    throw new ArgumentNullException(nameof(parameters));
+                }
+
+                Resource result = null;
+                string identifier = parameters.ResourceIdentifier.Identifier;
+
+                if (this.storage.Users.ContainsKey(identifier))
+                {
+                    if (this.storage.Users.TryGetValue(identifier, out Core2EnterpriseUser user))
+                    {
+                        result = user as Resource;
+                        return Task.FromResult(result);
+                    }
+                }
+
+                throw new HttpResponseException(HttpStatusCode.NotFound);
+            }
         }
 
         public override Task UpdateAsync(IPatch patch, string correlationIdentifier)
         {
-            if (null == patch)
+            lock (this.storage.SyncRoot)
             {
-                throw new ArgumentNullException(nameof(patch));
+                if (null == patch)
+                {
+                    throw new ArgumentNullException(nameof(patch));
+                }
+
+                if (null == patch.ResourceIdentifier)
+                {
+                    throw new ArgumentException(string.Format(SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidOperation));
+                }
+
+                if (string.IsNullOrWhiteSpace(patch.ResourceIdentifier.Identifier))
+                {
+                    throw new ArgumentException(SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidOperation);
+                }
+
+                if (null == patch.PatchRequest)
+                {
+                    throw new ArgumentException(SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidOperation);
+                }
+
+                PatchRequest2 patchRequest =
+                    patch.PatchRequest as PatchRequest2;
+
+                if (null == patchRequest)
+                {
+                    string unsupportedPatchTypeName = patch.GetType().FullName;
+                    throw new NotSupportedException(unsupportedPatchTypeName);
+                }
+
+                if (this.storage.Users.TryGetValue(patch.ResourceIdentifier.Identifier, out Core2EnterpriseUser user))
+                {
+                    // RFC 7644 section 3.5.2: all of the operations, or none. See the matching
+                    // comment in InMemoryGroupProvider.UpdateAsync.
+                    Core2EnterpriseUser candidate = ResourceCloner.Clone(user);
+                    candidate.Apply(patchRequest);
+                    candidate.Metadata.LastModified = DateTime.UtcNow;
+
+                    this.storage.Users[patch.ResourceIdentifier.Identifier] = candidate;
+                }
+                else
+                {
+                    throw new HttpResponseException(HttpStatusCode.NotFound);
+                }
+
+                return Task.CompletedTask;
             }
-
-            if (null == patch.ResourceIdentifier)
-            {
-                throw new ArgumentException(string.Format(SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidOperation));
-            }
-
-            if (string.IsNullOrWhiteSpace(patch.ResourceIdentifier.Identifier))
-            {
-                throw new ArgumentException(SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidOperation);
-            }
-
-            if (null == patch.PatchRequest)
-            {
-                throw new ArgumentException(SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidOperation);
-            }
-
-            PatchRequest2 patchRequest =
-                patch.PatchRequest as PatchRequest2;
-
-            if (null == patchRequest)
-            {
-                string unsupportedPatchTypeName = patch.GetType().FullName;
-                throw new NotSupportedException(unsupportedPatchTypeName);
-            }
-
-            if (this.storage.Users.TryGetValue(patch.ResourceIdentifier.Identifier, out Core2EnterpriseUser user))
-            {
-                // RFC 7644 section 3.5.2: all of the operations, or none. See the matching
-                // comment in InMemoryGroupProvider.UpdateAsync.
-                Core2EnterpriseUser candidate = ResourceCloner.Clone(user);
-                candidate.Apply(patchRequest);
-                candidate.Metadata.LastModified = DateTime.UtcNow;
-
-                this.storage.Users[patch.ResourceIdentifier.Identifier] = candidate;
-            }
-            else
-            {
-                throw new HttpResponseException(HttpStatusCode.NotFound);
-            }
-
-            return Task.CompletedTask;
         }
     }
 }
