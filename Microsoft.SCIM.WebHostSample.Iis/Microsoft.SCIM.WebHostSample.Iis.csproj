@@ -1,0 +1,66 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Demonstrates integration-guide.md Option A: adding the SCIM endpoints to an application
+    that already has its own ASP.NET Web API surface, hosted under System.Web (IIS).
+
+    Microsoft.SCIM.WebHostSample.Net48 stays as it is - an OWIN self-host that runs with F5.
+    This project is the counterpart for the deployment shape most consumers actually have.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <OutputType>Library</OutputType>
+    <AssemblyName>Microsoft.SCIM.WebHostSample.Iis</AssemblyName>
+    <RootNamespace>Microsoft.SCIM.WebHostSample.Iis</RootNamespace>
+
+    <!--
+      IIS expects an application folder containing Web.config and bin\*.dll. The SDK's default
+      bin\<Configuration>\<TargetFramework>\ layout is not that, so it is flattened here and
+      the project folder itself becomes the application root. The trade-off is that Debug and
+      Release write to the same place; a real application would publish instead.
+    -->
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <OutputPath>bin\</OutputPath>
+
+    <!-- Global.asax is application markup, not content to compile or copy. -->
+    <EnableDefaultNoneItems>false</EnableDefaultNoneItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The OWIN pipeline, hosted by System.Web rather than by HttpListener. -->
+    <PackageReference Include="Microsoft.Owin.Host.SystemWeb" Version="4.2.2" />
+    <PackageReference Include="Microsoft.AspNet.WebApi.Owin" Version="5.2.9" />
+    <!-- The pre-existing application's own Web API surface, on GlobalConfiguration. -->
+    <PackageReference Include="Microsoft.AspNet.WebApi.WebHost" Version="5.2.9" />
+    <PackageReference Include="Microsoft.Owin.Security.Jwt" Version="4.2.2" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- HttpRuntime.BinDirectory, and the System.Web hosting types generally. -->
+    <Reference Include="System.Web" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Microsoft.SCIM.AspNet\Microsoft.SCIM.AspNet.csproj" />
+  </ItemGroup>
+
+  <!--
+    The provider, the sample schema resources, the configuration files and the sample token
+    issuer are single-sourced from the other two samples rather than copied. See
+    MULTI-TARGET-PLAN.md D6.
+  -->
+  <ItemGroup>
+    <Compile Include="..\Microsoft.SCIM.WebHostSample\Provider\**\*.cs" Link="Provider\%(Filename)%(Extension)" />
+    <Compile Include="..\Microsoft.SCIM.WebHostSample\Resources\**\*.cs" Link="Resources\%(Filename)%(Extension)" />
+    <Compile Include="..\Microsoft.SCIM.WebHostSample.Net48\Controllers\TokenController.cs"
+             Link="Controllers\TokenController.cs" />
+    <None Include="..\Microsoft.SCIM.WebHostSample\appsettings*.json" Link="%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
