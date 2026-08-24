@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
+﻿// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
 
 namespace Microsoft.SCIM
 {
@@ -9,6 +9,16 @@ namespace Microsoft.SCIM
     public interface IProviderAdapter<T> where T : Resource
     {
         string SchemaIdentifier { get; }
+
+        /// <summary>
+        /// Whether a successful PATCH answers 200 with the updated resource rather than 204.
+        /// </summary>
+        /// <remarks>
+        /// RFC 7644 section 3.5.2 leaves the choice to the service. It is a property of the
+        /// resource type's contract, not of its schema, so it is declared here rather than
+        /// inferred from <see cref="SchemaIdentifier"/>.
+        /// </remarks>
+        bool ReturnsResourceOnPatch { get; }
 
         Task<Resource> Create(HttpRequestMessage request, Resource resource, string correlationIdentifier);
         Task Delete(HttpRequestMessage request, string identifier, string correlationIdentifier);

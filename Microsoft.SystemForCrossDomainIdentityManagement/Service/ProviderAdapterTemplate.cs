@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
+﻿// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
 
 namespace Microsoft.SCIM
 {
@@ -21,6 +21,12 @@ namespace Microsoft.SCIM
         }
 
         public abstract string SchemaIdentifier { get; }
+
+        /// <inheritdoc/>
+        public virtual bool ReturnsResourceOnPatch
+        {
+            get { return false; }
+        }
 
         public virtual async Task<Resource> Create(HttpRequestMessage request, Resource resource, string correlationIdentifier)
         {

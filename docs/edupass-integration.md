@@ -56,11 +56,11 @@ callers. It is a development convenience and has no place in front of a real Edu
 
 ## 2. The User resource
 
-`EduPassUser` derives from `Core2EnterpriseUserBase` and carries the extension as a real
+`EduPassUser` derives from `Core2EnterpriseUser` and carries the extension as a real
 `[DataMember]`:
 
 ```csharp
-public class EduPassUser : Core2EnterpriseUserBase
+public class EduPassUser : Core2EnterpriseUser
 {
     [DataMember(Name = EduPassSchemaIdentifiers.UserExtension, ...)]
     public virtual EduPassUserExtension EduPassExtension { get; set; }
@@ -93,8 +93,11 @@ untyped extension.
 
 ### Replacing the `/Users` controller
 
-`Microsoft.SCIM.UsersController` binds the sealed `Core2EnterpriseUser`, so it cannot carry the
-extension, and two controllers cannot share a route. Suppress it and let `SCIM.EduPass` serve
+`Microsoft.SCIM.UsersController` is `ScimResourceControllerBase<Core2EnterpriseUser>`, and the
+generic parameter is the model-binding type - `[FromBody] T resource`. Binding constructs the
+declared type, so that controller produces a `Core2EnterpriseUser` and drops the extension no
+matter what `EduPassUser` derives from. A derived User type needs its own closed generic, and
+two controllers cannot share a route. Suppress the built-in one and let `SCIM.EduPass` serve
 `/Users`:
 
 ```csharp

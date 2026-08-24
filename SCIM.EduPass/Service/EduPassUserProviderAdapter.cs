@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
+﻿// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
 
 namespace Scim.EduPass
 {
@@ -9,17 +9,29 @@ namespace Scim.EduPass
     /// The provider adapter for <see cref="EduPassUser"/>.
     /// </summary>
     /// <remarks>
-    /// Reports the enterprise User schema identifier rather than the Edupass extension URI.
-    /// Two reasons: <c>SchemaIdentifier.TryFindPath</c> maps only the core identifiers to
-    /// <c>/Users</c>, and <c>ScimRequestHandler.PatchAsync</c> tests for that same identifier to
-    /// decide whether a PATCH answers 200 with the resource - which is the behaviour the Edupass
-    /// specification requires of <c>PATCH /Users/{id}</c>.
+    /// Reports the enterprise User schema identifier, which is the correct answer:
+    /// <see cref="IProviderAdapter{T}.SchemaIdentifier"/> names the resource type's base schema,
+    /// and an <see cref="EduPassUser"/> is an enterprise User that carries one further extension.
+    /// The Edupass URI identifies that extension, not the resource type, so it does not belong
+    /// here - and reporting it would leave <c>SchemaIdentifier.FindPath</c> with no mapping to
+    /// <c>/Users</c>.
+    ///
+    /// <see cref="ReturnsResourceOnPatch"/> is what makes <c>PATCH /Users/{id}</c> answer 200
+    /// with the resource, as the Edupass specification requires.
     /// </remarks>
     public class EduPassUserProviderAdapter : ProviderAdapterTemplate<EduPassUser>
     {
         public EduPassUserProviderAdapter(IProvider provider)
             : base(provider)
         {
+        }
+
+        public override bool ReturnsResourceOnPatch
+        {
+            get
+            {
+                return true;
+            }
         }
 
         public override string SchemaIdentifier

@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
+﻿// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
 
 namespace Scim.EduPass
 {
@@ -53,8 +53,9 @@ namespace Scim.EduPass
     /// A SCIM User carrying the Edupass extension.
     /// </summary>
     /// <remarks>
-    /// Derives from <see cref="Core2EnterpriseUserBase"/> rather than
-    /// <c>Core2EnterpriseUser</c>, which is sealed.
+    /// Derives from <see cref="Core2EnterpriseUser"/> so that the enterprise PATCH semantics in
+    /// <c>Core2EnterpriseUserExtensions</c> apply - those are extension methods on that concrete
+    /// type and bind statically, so a type derived from the base class would not get them.
     ///
     /// The extension is a real <c>[DataMember]</c> rather than an entry in the inherited
     /// <c>CustomExtension</c> dictionary. The dictionary would now work -
@@ -68,7 +69,7 @@ namespace Scim.EduPass
     /// schema and the Edupass extension, as the specification's examples show.
     /// </remarks>
     [DataContract]
-    public class EduPassUser : Core2EnterpriseUserBase
+    public class EduPassUser : Core2EnterpriseUser
     {
         public EduPassUser()
         {

@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
+﻿// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
 
 namespace Microsoft.SCIM
 {
@@ -7,6 +7,11 @@ namespace Microsoft.SCIM
         public Core2EnterpriseUserProviderAdapter(IProvider provider)
             : base(provider)
         {
+        }
+
+        public override bool ReturnsResourceOnPatch
+        {
+            get { return true; }
         }
 
         public override string SchemaIdentifier
