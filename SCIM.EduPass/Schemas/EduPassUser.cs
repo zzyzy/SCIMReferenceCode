@@ -2,6 +2,8 @@
 
 namespace Scim.EduPass
 {
+    using System;
+    using System.Linq;
     using System.Runtime.Serialization;
     using Microsoft.SCIM;
 
@@ -103,6 +105,59 @@ namespace Scim.EduPass
         {
             get;
             set;
+        }
+
+        /// <summary>
+        /// Applies a PATCH operation against the Edupass extension.
+        /// </summary>
+        /// <remarks>
+        /// The core patcher knows nothing of this schema and rejects what it cannot place, so
+        /// without this override every PATCH naming an Edupass attribute would answer 400.
+        /// </remarks>
+        protected override bool TryPatchExtensionAttribute(PatchOperation2 operation)
+        {
+            if (null == operation?.Path)
+            {
+                return false;
+            }
+
+            if (!EduPassSchemaIdentifiers.UserExtension.Equals(
+                    operation.Path.SchemaIdentifier,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (null == this.EduPassExtension)
+            {
+                this.EduPassExtension = new EduPassUserExtension();
+            }
+
+            string value = OperationName.Remove == operation.Name
+                ? null
+                : operation.Value?.SingleOrDefault()?.Value;
+
+            switch (operation.Path.AttributePath)
+            {
+                case EduPassAttributeNames.IdentityType:
+                    this.EduPassExtension.IdentityType = value;
+                    return true;
+
+                case EduPassAttributeNames.UinFin:
+                    this.EduPassExtension.UinFin = value;
+                    return true;
+
+                case EduPassAttributeNames.SchoolOrHq:
+                    this.EduPassExtension.SchoolOrHq = value;
+                    return true;
+
+                case EduPassAttributeNames.IdentitySource:
+                    this.EduPassExtension.IdentitySource = value;
+                    return true;
+
+                default:
+                    return false;
+            }
         }
     }
 }

@@ -6,6 +6,7 @@ namespace Microsoft.SCIM
 {
     using System;
     using System.Collections.Generic;
+    using System.Globalization;
     using System.Linq;
     using Newtonsoft.Json;
 
@@ -59,26 +60,39 @@ namespace Microsoft.SCIM
                     Path = operation.Path
                 };
 
-                OperationValue[] values =
-                    JsonConvert.DeserializeObject<OperationValue[]>(
-                        operation.Value,
-                        ProtocolConstants.JsonSettings.Value);
+                // RFC 7644 section 3.5.2.2: a remove operation carries no value, and the
+                // operation is then left carrying none either - the patchers below read
+                // SingleOrDefault() as null and clear the attribute. Deserializing the absent
+                // value threw, which surfaced as 400 invalidPath; substituting a value object
+                // whose own value was null instead made the remove look like the removal of
+                // some other value, which they ignore. Either way nothing could be removed by
+                // path alone.
+                if (null != operation.Value)
+                {
+                    OperationValue[] values =
+                        JsonConvert.DeserializeObject<OperationValue[]>(
+                            operation.Value,
+                            ProtocolConstants.JsonSettings.Value);
 
-                if (values == null)
-                {
-                    string value =
-                        JsonConvert.DeserializeObject<string>(operation.Value, ProtocolConstants.JsonSettings.Value);
-                    OperationValue valueSingle = new OperationValue()
+                    if (null == values)
                     {
-                        Value = value
-                    };
-                    operationInternal.AddValue(valueSingle);
-                }
-                else
-                {
-                    foreach (OperationValue value in values)
+                        string value =
+                            JsonConvert.DeserializeObject<string>(
+                                operation.Value,
+                                ProtocolConstants.JsonSettings.Value);
+
+                        operationInternal.AddValue(
+                            new OperationValue()
+                            {
+                                Value = value
+                            });
+                    }
+                    else
                     {
-                        operationInternal.AddValue(value);
+                        foreach (OperationValue value in values)
+                        {
+                            operationInternal.AddValue(value);
+                        }
                     }
                 }
 
@@ -106,6 +120,27 @@ namespace Microsoft.SCIM
                         StringComparison.OrdinalIgnoreCase) == true))
             {
                 user.PatchEnterpriseExtension(operation);
+                return;
+            }
+
+            // A path qualified by any other schema names an extension attribute, never a core one.
+            // Without this it fell through to the switch below on its attribute name alone, so
+            // "urn:example:2.0:User:displayName" would have overwritten the core displayName.
+            if (
+                   !string.IsNullOrWhiteSpace(operation.Path.SchemaIdentifier)
+                && !operation.Path.SchemaIdentifier.Equals(
+                        SchemaIdentifiers.Core2User,
+                        StringComparison.OrdinalIgnoreCase))
+            {
+                if (!user.TryPatchExtensionAttribute(operation))
+                {
+                    throw new ArgumentException(
+                        string.Format(
+                            CultureInfo.InvariantCulture,
+                            SystemForCrossDomainIdentityManagementProtocolResources.ExceptionInvalidPathTemplate,
+                            operation.Path));
+                }
+
                 return;
             }
 
@@ -267,7 +302,73 @@ namespace Microsoft.SCIM
                         user.UserName = value.Value;
                     }
                     break;
+
+                // Modelled on the resource and advertised at /Schemas, but previously absent from
+                // this switch, so a PATCH against them answered success and changed nothing.
+                case AttributeNames.Nickname:
+                    Core2EnterpriseUserExtensions.PatchSingularAttribute(
+                        operation, () => user.Nickname, (string patched) => user.Nickname = patched);
+                    break;
+
+                case AttributeNames.Locale:
+                    Core2EnterpriseUserExtensions.PatchSingularAttribute(
+                        operation, () => user.Locale, (string patched) => user.Locale = patched);
+                    break;
+
+                case AttributeNames.TimeZone:
+                    Core2EnterpriseUserExtensions.PatchSingularAttribute(
+                        operation, () => user.TimeZone, (string patched) => user.TimeZone = patched);
+                    break;
+
+                case AttributeNames.UserType:
+                    Core2EnterpriseUserExtensions.PatchSingularAttribute(
+                        operation, () => user.UserType, (string patched) => user.UserType = patched);
+                    break;
+
+                default:
+                    if (!user.TryPatchExtensionAttribute(operation))
+                    {
+                        // RFC 7644 section 3.5.2: a path that names no attribute the server can
+                        // operate on is an error. Ignoring it answered 204 while doing nothing,
+                        // which also made the required atomicity unenforceable - a malformed
+                        // operation could never fail its request.
+                        throw new ArgumentException(
+                            string.Format(
+                                CultureInfo.InvariantCulture,
+                                SystemForCrossDomainIdentityManagementProtocolResources.ExceptionInvalidPathTemplate,
+                                operation.Path));
+                    }
+
+                    break;
             }
+        }
+
+        /// <summary>
+        /// Applies an operation to a singular string attribute.
+        /// </summary>
+        /// <remarks>
+        /// Reproduces the idiom already repeated for displayName, title and the rest: a remove
+        /// naming a value that does not match the stored one is ignored, and any other remove -
+        /// including one with no value at all - clears the attribute.
+        /// </remarks>
+        private static void PatchSingularAttribute(
+            PatchOperation2 operation,
+            Func<string> read,
+            Action<string> write)
+        {
+            OperationValue value = operation.Value.SingleOrDefault();
+
+            if (OperationName.Remove == operation.Name)
+            {
+                if (null != value && !string.Equals(read(), value.Value, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+
+                value = null;
+            }
+
+            write(null == value ? null : value.Value);
         }
 
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Maintainability", "CA1502:AvoidExcessiveComplexity", Justification = "None")]

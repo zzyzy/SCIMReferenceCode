@@ -150,11 +150,50 @@ namespace Microsoft.SCIM
                     }
                     break;
 
+                case AttributeNames.ExternalIdentifier:
+                    value = operation.Value.SingleOrDefault();
+
+                    if (OperationName.Remove == operation.Name)
+                    {
+                        if (
+                            null == value
+                            || string.Equals(group.ExternalIdentifier, value.Value, StringComparison.OrdinalIgnoreCase))
+                        {
+                            value = null;
+                        }
+                        else
+                        {
+                            break;
+                        }
+                    }
+
+                    group.ExternalIdentifier = null == value ? null : value.Value;
+                    break;
+
                 case AttributeNames.Members:
                     if (operation.Value != null)
                     {
                         switch (operation.Name)
                         {
+                            // A full membership sync. Without this the operation fell through the
+                            // switch, leaving the membership untouched while the service still
+                            // answered 204.
+                            case OperationName.Replace:
+                                group.Members =
+                                    operation
+                                    .Value
+                                    .Where((OperationValue item) => !string.IsNullOrWhiteSpace(item.Value))
+                                    .Select(
+                                        (OperationValue item) =>
+                                            new Member()
+                                            {
+                                                Value = item.Value
+                                            })
+                                    .GroupBy((Member item) => item.Value, StringComparer.OrdinalIgnoreCase)
+                                    .Select((IGrouping<string, Member> item) => item.First())
+                                    .ToArray();
+                                break;
+
                             case OperationName.Add:
                                 IEnumerable<Member> membersToAdd =
                                      operation
@@ -217,6 +256,16 @@ namespace Microsoft.SCIM
                         }
                     }
                     break;
+
+                default:
+                    // RFC 7644 section 3.5.2: a path naming no operable attribute is an error.
+                    // Ignoring it answered 204 while changing nothing, and made the required
+                    // atomicity unenforceable - a malformed operation could never fail its request.
+                    throw new ArgumentException(
+                        string.Format(
+                            CultureInfo.InvariantCulture,
+                            SystemForCrossDomainIdentityManagementProtocolResources.ExceptionInvalidPathTemplate,
+                            operation.Path));
             }
         }
 

@@ -21,5 +21,22 @@ namespace Microsoft.SCIM
             : base()
         {
         }
+
+        /// <summary>
+        /// Applies a PATCH operation naming an attribute this type does not model.
+        /// </summary>
+        /// <returns>
+        /// True if the operation was applied, false to leave it unhandled.
+        /// </returns>
+        /// <remarks>
+        /// An unhandled operation is rejected with 400 invalidPath, so a derived type carrying a
+        /// schema extension must override this to claim its own attributes - otherwise a PATCH
+        /// against them fails. <see cref="Core2EnterpriseUserExtensions"/> binds statically, so
+        /// this virtual call is the only point at which a subclass gets to participate.
+        /// </remarks>
+        protected internal virtual bool TryPatchExtensionAttribute(PatchOperation2 operation)
+        {
+            return false;
+        }
     }
 }
