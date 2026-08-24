@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
+﻿// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
 
 namespace Microsoft.SCIM.WebHostSample.Provider
 {
@@ -147,6 +147,14 @@ namespace Microsoft.SCIM.WebHostSample.Provider
                                     predicateAnd = predicateAnd.And(p => p.UserName != null && p.UserName.StartsWith(userName, StringComparison.OrdinalIgnoreCase));
                                     break;
 
+                                case ComparisonOperator.EndsWith:
+                                    predicateAnd = predicateAnd.And(p => p.UserName != null && p.UserName.EndsWith(userName, StringComparison.OrdinalIgnoreCase));
+                                    break;
+
+                                case ComparisonOperator.NotEquals:
+                                    predicateAnd = predicateAnd.And(p => !string.Equals(p.UserName, userName, StringComparison.OrdinalIgnoreCase));
+                                    break;
+
                                 default:
                                     throw new NotSupportedException(
                                         string.Format(SystemForCrossDomainIdentityManagementServiceResources.ExceptionFilterOperatorNotSupportedTemplate, andFilter.FilterOperator));
@@ -185,7 +193,17 @@ namespace Microsoft.SCIM.WebHostSample.Provider
                         //LastModified filter
                         else if (andFilter.AttributePath.Equals($"{AttributeNames.Metadata}.{AttributeNames.LastModified}", StringComparison.OrdinalIgnoreCase))
                         {
-                            if (andFilter.FilterOperator == ComparisonOperator.EqualOrGreaterThan)
+                            if (andFilter.FilterOperator == ComparisonOperator.GreaterThan)
+                            {
+                                DateTime comparisonValue = DateTime.Parse(andFilter.ComparisonValue).ToUniversalTime();
+                                predicateAnd = predicateAnd.And(p => p.Metadata.LastModified > comparisonValue);
+                            }
+                            else if (andFilter.FilterOperator == ComparisonOperator.LessThan)
+                            {
+                                DateTime comparisonValue = DateTime.Parse(andFilter.ComparisonValue).ToUniversalTime();
+                                predicateAnd = predicateAnd.And(p => p.Metadata.LastModified < comparisonValue);
+                            }
+                            else if (andFilter.FilterOperator == ComparisonOperator.EqualOrGreaterThan)
                             {
                                 DateTime comparisonValue = DateTime.Parse(andFilter.ComparisonValue).ToUniversalTime();
                                 predicateAnd = predicateAnd.And(p => p.Metadata.LastModified >= comparisonValue);

@@ -57,7 +57,7 @@ and once against `scim/Groups` with `Core2Group` payloads.
 | U7 | `GET` collection, store empty | **200** | — | `ListResponse` with `totalResults: 0`, `Resources: []` | RFC 7644 §3.4.2 |
 | U8 | `GET` collection, store populated | **200** | — | `ListResponse` with `totalResults`, `itemsPerPage`, `startIndex` | RFC 7644 §3.4.2 |
 | U9 | `GET ?filter=<attr> eq "<value>"` | **200** | — | `ListResponse` containing only matching resources | RFC 7644 §3.4.2.2 |
-| U10 | `GET ?filter=` one case per member of `Schemas/ComparisonOperator.cs` (`eq`, `ne`, `co`, `sw`, `ew`, `gt`, `ge`, `lt`, `le`) | **200** | — | `ListResponse`; operator semantics per RFC | RFC 7644 §3.4.2.2 |
+| U10 | `GET ?filter=` one case per member of `Schemas/ComparisonOperator.cs` (`eq`, `ne`, `co`, `sw`, `ew`, `gt`, `ge`, `lt`, `le`) | **200** | — | `ListResponse`; operator semantics per RFC | RFC 7644 §3.4.2.2 — all nine now answered by the reference provider |
 | U11 | `GET ?filter=<a> eq <x> and (<b> co <y> or <b> co <z>)` | **200** | — | `ListResponse`; grouping and precedence honoured | RFC 7644 §3.4.2.2 |
 | U12 | `GET ?filter=<malformed>` | **400** | — | `Core2Error` | RFC 7644 §3.4.2.2, §3.12 |
 | U13 | `GET ?attributes=userName,emails` | **200** | — | only the requested attributes plus always-returned ones (`id`, `schemas`, `meta`) | RFC 7644 §3.9 |
