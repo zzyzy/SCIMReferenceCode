@@ -6,6 +6,7 @@ namespace Microsoft.SCIM
     using System.Net.Http.Formatting;
     using System.Net.Http.Headers;
     using System.Web.Http;
+    using System.Web.Http.Dispatcher;
     using Newtonsoft.Json;
 
     /// <summary>
@@ -29,11 +30,25 @@ namespace Microsoft.SCIM
 
             configuration.DependencyResolver = new ServiceProviderDependencyResolver(services);
 
+            // Controllers are not registered in the container on either leg; both construct
+            // them from registered dependencies instead. See ScimControllerActivator.
+            configuration.Services.Replace(typeof(IHttpControllerActivator), new ScimControllerActivator());
+
+            // The service root at scim/{identifier} overlaps every other SCIM route; Web API
+            // treats that as an error where ASP.NET Core resolves it. See ScimControllerSelector.
+            configuration.Services.Replace(
+                typeof(IHttpControllerSelector),
+                new ScimControllerSelector(configuration));
+
             // Attribute routes only. There is deliberately no conventional default route on
             // either leg: Web API's default shape (api/{controller}/{id}) does not match
             // ASP.NET Core's, and a fallback route is the largest single source of drift
             // between the two. See MULTI-TARGET-PLAN.md D14a.
-            configuration.MapHttpAttributeRoutes();
+            //
+            // ScimDirectRouteProvider rather than the default one so that the [Route]
+            // attributes declared on ScimApiResourceControllerBase<T> are inherited by the
+            // concrete controllers, as they are on ASP.NET Core.
+            configuration.MapHttpAttributeRoutes(new ScimDirectRouteProvider());
 
             // Match the ASP.NET Core leg's Newtonsoft settings exactly.
             JsonMediaTypeFormatter jsonFormatter = configuration.Formatters.JsonFormatter;
