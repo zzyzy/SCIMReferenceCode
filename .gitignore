@@ -338,3 +338,5 @@ Log/
 # explicit http://localhost:5000 URL here is part of the documented run instructions rather
 # than a developer's local preference. See docs/net48-hosting.md and README.md.
 !Microsoft.SCIM.WebHostSample/Properties/launchSettings.json
+
+.claude/settings.local.json
