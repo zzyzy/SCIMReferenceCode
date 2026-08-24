@@ -17,6 +17,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Microsoft.SCIM.WebHostSampl
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Microsoft.SCIM.WebHostSample.IIS", "Microsoft.SCIM.WebHostSample.IIS\Microsoft.SCIM.WebHostSample.IIS.csproj", "{7915A367-677C-4C15-9F7B-D534CEB335E9}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SCIM.EduPass", "SCIM.EduPass\SCIM.EduPass.csproj", "{32879815-0A22-497E-8CA8-12C2F58F5869}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -99,6 +101,18 @@ Global
 		{7915A367-677C-4C15-9F7B-D534CEB335E9}.Release|x64.Build.0 = Release|Any CPU
 		{7915A367-677C-4C15-9F7B-D534CEB335E9}.Release|x86.ActiveCfg = Release|Any CPU
 		{7915A367-677C-4C15-9F7B-D534CEB335E9}.Release|x86.Build.0 = Release|Any CPU
+		{32879815-0A22-497E-8CA8-12C2F58F5869}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{32879815-0A22-497E-8CA8-12C2F58F5869}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{32879815-0A22-497E-8CA8-12C2F58F5869}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{32879815-0A22-497E-8CA8-12C2F58F5869}.Debug|x64.Build.0 = Debug|Any CPU
+		{32879815-0A22-497E-8CA8-12C2F58F5869}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{32879815-0A22-497E-8CA8-12C2F58F5869}.Debug|x86.Build.0 = Debug|Any CPU
+		{32879815-0A22-497E-8CA8-12C2F58F5869}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{32879815-0A22-497E-8CA8-12C2F58F5869}.Release|Any CPU.Build.0 = Release|Any CPU
+		{32879815-0A22-497E-8CA8-12C2F58F5869}.Release|x64.ActiveCfg = Release|Any CPU
+		{32879815-0A22-497E-8CA8-12C2F58F5869}.Release|x64.Build.0 = Release|Any CPU
+		{32879815-0A22-497E-8CA8-12C2F58F5869}.Release|x86.ActiveCfg = Release|Any CPU
+		{32879815-0A22-497E-8CA8-12C2F58F5869}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

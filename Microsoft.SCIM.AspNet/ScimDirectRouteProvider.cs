@@ -32,5 +32,28 @@ namespace Microsoft.SCIM
 
             return actionDescriptor.GetCustomAttributes<IDirectRouteFactory>(inherit: true);
         }
+
+        /// <summary>
+        /// Replaces the default <c>scim</c> segment in a controller's <c>[RoutePrefix]</c>
+        /// with the one configured through <see cref="ScimPath.SetPrefix"/>.
+        /// </summary>
+        /// <remarks>
+        /// The net48 counterpart to <c>ScimRouteConvention</c> on the ASP.NET Core leg. This
+        /// is the whole of it: the prefixes are the only templates carrying the segment, since
+        /// the action-level <c>[Route]</c> templates are relative (<c>""</c> and
+        /// <c>{identifier}</c>).
+        /// </remarks>
+        protected override string GetRoutePrefix(HttpControllerDescriptor controllerDescriptor)
+        {
+            string prefix = base.GetRoutePrefix(controllerDescriptor);
+
+            if (null == controllerDescriptor
+                || controllerDescriptor.ControllerType?.Assembly != typeof(ScimDirectRouteProvider).Assembly)
+            {
+                return prefix;
+            }
+
+            return ScimPath.ApplyPrefix(prefix);
+        }
     }
 }

@@ -6,6 +6,7 @@ namespace Microsoft.SCIM
 {
     using System.Threading.Tasks;
     using System.Web.Http;
+    using Microsoft.Extensions.Logging;
 
     [RoutePrefix(ServiceConstants.RouteBulk)]
     [Authorize]
@@ -13,9 +14,9 @@ namespace Microsoft.SCIM
     {
         private readonly ScimDiscoveryRequestHandler handler;
 
-        public BulkRequestController(IProvider provider, IMonitor monitor)
+        public BulkRequestController(IProvider provider, ILogger<BulkRequestController> logger)
         {
-            this.handler = ScimRequestHandlerFactory.CreateDiscoveryHandler(provider, monitor);
+            this.handler = ScimRequestHandlerFactory.CreateDiscoveryHandler(provider, logger);
         }
 
         [HttpPost]

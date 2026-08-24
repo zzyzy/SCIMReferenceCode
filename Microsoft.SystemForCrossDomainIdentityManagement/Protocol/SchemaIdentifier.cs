@@ -1,4 +1,4 @@
-﻿//------------------------------------------------------------
+//------------------------------------------------------------
 // Copyright (c) Microsoft Corporation.  All rights reserved.
 //------------------------------------------------------------
 
@@ -48,7 +48,7 @@ namespace Microsoft.SCIM
                     path = ProtocolConstants.PathGroups;
                     return true;
                 case SchemaIdentifiers.None:
-                    path = SchemaConstants.PathInterface;
+                    path = ScimPath.Prefix;
                     return true;
                 default:
                     return false;

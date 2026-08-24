@@ -3,6 +3,7 @@
 namespace Microsoft.SCIM
 {
     using System.Web.Http;
+    using Microsoft.Extensions.Logging;
 
     [RoutePrefix(ServiceConstants.RouteSchemas)]
     [Authorize]
@@ -10,9 +11,9 @@ namespace Microsoft.SCIM
     {
         private readonly ScimDiscoveryRequestHandler handler;
 
-        public SchemasController(IProvider provider, IMonitor monitor)
+        public SchemasController(IProvider provider, ILogger<SchemasController> logger)
         {
-            this.handler = ScimRequestHandlerFactory.CreateDiscoveryHandler(provider, monitor);
+            this.handler = ScimRequestHandlerFactory.CreateDiscoveryHandler(provider, logger);
         }
 
         [HttpGet]

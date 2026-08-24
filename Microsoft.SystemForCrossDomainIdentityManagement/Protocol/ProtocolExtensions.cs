@@ -1,4 +1,4 @@
-﻿//------------------------------------------------------------
+//------------------------------------------------------------
 // Copyright (c) Microsoft Corporation.  All rights reserved.
 //------------------------------------------------------------
 
@@ -815,7 +815,7 @@ namespace Microsoft.SCIM
             string baseResourceIdentifierValue = baseResourceIdentifier.ToString();
             string resultValue =
                 baseResourceIdentifierValue +
-                SchemaConstants.PathInterface +
+                ScimPath.Prefix +
                 ServiceConstants.SeparatorSegments +
                 path;
 

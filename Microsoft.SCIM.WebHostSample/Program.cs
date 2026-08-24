@@ -81,7 +81,7 @@ namespace Microsoft.SCIM.WebHostSample
             // Registers the provider, the monitor, the SCIM controllers (which live in
             // Microsoft.SCIM.AspNetCore, not in this assembly), the Newtonsoft settings and
             // the HttpResponseException filter.
-            builder.Services.AddScim(new InMemoryProvider(), new ConsoleMonitor());
+            builder.Services.AddScim(new InMemoryProvider());
 
             WebApplication app = builder.Build();
 

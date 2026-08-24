@@ -99,14 +99,14 @@ namespace Microsoft.SCIM
         /// ASP.NET Core leg, makes both legs emit the SCIM error shape that RFC 7644
         /// section 3.12 asks for anyway. See docs/scim-conformance.md requirement X10.
         /// </remarks>
-        public static ScimResult Status(HttpStatusCode statusCode)
+        public static ScimResult Status(HttpStatusCode statusCode, string scimType = null)
         {
             if ((int)statusCode < 400)
             {
                 return new ScimResult(statusCode, null, null);
             }
 
-            return ScimResult.Error(statusCode, ScimResult.DescribeStatus(statusCode));
+            return ScimResult.Error(statusCode, ScimResult.DescribeStatus(statusCode), scimType);
         }
 
         private static string DescribeStatus(HttpStatusCode statusCode)
@@ -120,9 +120,51 @@ namespace Microsoft.SCIM
         }
 
         /// <summary>A status code with a <see cref="Core2Error"/> body (RFC 7644 section 3.12).</summary>
-        public static ScimResult Error(HttpStatusCode statusCode, string message)
+        /// <param name="scimType">
+        /// One of the <see cref="ScimTypes"/> keywords. RFC 7644 section 3.12 requires one on a
+        /// 400 and permits <c>uniqueness</c> on a 409, so when the caller does not supply one
+        /// and the status implies it unambiguously, it is filled in - see
+        /// <see cref="DefaultScimType"/>.
+        /// </param>
+        public static ScimResult Error(HttpStatusCode statusCode, string message, string scimType = null)
         {
-            return new ScimResult(statusCode, new Core2Error(message, (int)statusCode), null);
+            return
+                new ScimResult(
+                    statusCode,
+                    new Core2Error(
+                        message,
+                        (int)statusCode,
+                        scimType ?? ScimResult.DefaultScimType(statusCode)),
+                    null);
+        }
+
+        /// <summary>
+        /// The <c>scimType</c> to use when a failure path did not name one.
+        /// </summary>
+        /// <remarks>
+        /// RFC 7644 section 3.12 makes <c>scimType</c> mandatory on a 400, so every 400 gets
+        /// one whether or not the failing path named it. <c>invalidValue</c> is the fallback
+        /// because its definition - "a required value was missing, or the value specified was
+        /// not compatible with the operation, attribute type, or resource schema" - is the
+        /// broadest of the keywords, and a provider throwing a bare
+        /// <c>HttpResponseException(BadRequest)</c> has told us nothing more specific. Paths
+        /// that do know better pass their own: <c>invalidFilter</c>, <c>invalidSyntax</c>,
+        /// <c>invalidPath</c>.
+        ///
+        /// 409 is <c>uniqueness</c> because a duplicate <c>userName</c> or <c>displayName</c>
+        /// is the only conflict the SCIM resource endpoints raise.
+        /// </remarks>
+        private static string DefaultScimType(HttpStatusCode statusCode)
+        {
+            switch (statusCode)
+            {
+                case HttpStatusCode.BadRequest:
+                    return ScimTypes.InvalidValue;
+                case HttpStatusCode.Conflict:
+                    return ScimTypes.Uniqueness;
+                default:
+                    return null;
+            }
         }
 
         /// <summary>
@@ -146,13 +188,20 @@ namespace Microsoft.SCIM
             HttpStatusCode statusCode =
                 responseException.Response?.StatusCode ?? HttpStatusCode.InternalServerError;
 
-            string detail = responseException.Response?.ReasonPhrase;
+            ScimTypedException typedException = responseException as ScimTypedException;
+
+            string detail = typedException?.Detail;
+            if (string.IsNullOrWhiteSpace(detail))
+            {
+                detail = responseException.Response?.ReasonPhrase;
+            }
+
             if (string.IsNullOrWhiteSpace(detail))
             {
                 detail = statusCode.ToString();
             }
 
-            return ScimResult.Error(statusCode, detail);
+            return ScimResult.Error(statusCode, detail, typedException?.ScimType);
         }
     }
 }

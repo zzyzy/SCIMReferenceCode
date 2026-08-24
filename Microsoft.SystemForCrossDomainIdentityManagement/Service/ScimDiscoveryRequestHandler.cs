@@ -8,6 +8,7 @@ namespace Microsoft.SCIM
     using System.Net.Http;
     using System.Threading.Tasks;
     using System.Web.Http;
+    using Microsoft.Extensions.Logging;
 
     /// <summary>
     /// The hosting-neutral discovery and bulk endpoints, ported from
@@ -23,13 +24,13 @@ namespace Microsoft.SCIM
     /// </remarks>
     public class ScimDiscoveryRequestHandler
     {
-        public ScimDiscoveryRequestHandler(IProvider provider, IMonitor monitor)
+        public ScimDiscoveryRequestHandler(IProvider provider, ILogger logger)
         {
             this.Provider = provider;
-            this.Monitor = monitor;
+            this.Logger = logger;
         }
 
-        protected IMonitor Monitor
+        protected ILogger Logger
         {
             get;
         }
@@ -37,17 +38,6 @@ namespace Microsoft.SCIM
         protected IProvider Provider
         {
             get;
-        }
-
-        protected bool TryGetMonitor(out IMonitor monitor)
-        {
-            monitor = this.Monitor;
-            if (null == monitor)
-            {
-                return false;
-            }
-
-            return true;
         }
 
         // Ported from SchemasController.Get.
@@ -79,57 +69,37 @@ namespace Microsoft.SCIM
             }
             catch (ArgumentException argumentException)
             {
-                if (this.TryGetMonitor(out IMonitor monitor))
-                {
-                    IExceptionNotification notification =
-                        ExceptionNotificationFactory.Instance.CreateNotification(
-                            argumentException,
-                            correlationIdentifier,
-                            ServiceNotificationIdentifiers.SchemasControllerGetArgumentException);
-                    monitor.Report(notification);
-                }
+                this.Logger.LogScimFailure(
+                    ScimEventIds.SchemasGetArgumentException,
+                    argumentException,
+                    correlationIdentifier);
 
                 throw new HttpResponseException(HttpStatusCode.BadRequest);
             }
             catch (NotImplementedException notImplementedException)
             {
-                if (this.TryGetMonitor(out IMonitor monitor))
-                {
-                    IExceptionNotification notification =
-                        ExceptionNotificationFactory.Instance.CreateNotification(
-                            notImplementedException,
-                            correlationIdentifier,
-                            ServiceNotificationIdentifiers.SchemasControllerGetNotImplementedException);
-                    monitor.Report(notification);
-                }
+                this.Logger.LogScimFailure(
+                    ScimEventIds.SchemasGetNotImplementedException,
+                    notImplementedException,
+                    correlationIdentifier);
 
                 throw new HttpResponseException(HttpStatusCode.NotImplemented);
             }
             catch (NotSupportedException notSupportedException)
             {
-                if (this.TryGetMonitor(out IMonitor monitor))
-                {
-                    IExceptionNotification notification =
-                        ExceptionNotificationFactory.Instance.CreateNotification(
-                            notSupportedException,
-                            correlationIdentifier,
-                            ServiceNotificationIdentifiers.SchemasControllerGetNotSupportedException);
-                    monitor.Report(notification);
-                }
+                this.Logger.LogScimFailure(
+                    ScimEventIds.SchemasGetNotSupportedException,
+                    notSupportedException,
+                    correlationIdentifier);
 
                 throw new HttpResponseException(HttpStatusCode.NotImplemented);
             }
             catch (Exception exception)
             {
-                if (this.TryGetMonitor(out IMonitor monitor))
-                {
-                    IExceptionNotification notification =
-                        ExceptionNotificationFactory.Instance.CreateNotification(
-                            exception,
-                            correlationIdentifier,
-                            ServiceNotificationIdentifiers.SchemasControllerGetException);
-                    monitor.Report(notification);
-                }
+                this.Logger.LogScimFailure(
+                    ScimEventIds.SchemasGetException,
+                    exception,
+                    correlationIdentifier);
 
                 throw;
             }
@@ -164,57 +134,37 @@ namespace Microsoft.SCIM
             }
             catch (ArgumentException argumentException)
             {
-                if (this.TryGetMonitor(out IMonitor monitor))
-                {
-                    IExceptionNotification notification =
-                        ExceptionNotificationFactory.Instance.CreateNotification(
-                            argumentException,
-                            correlationIdentifier,
-                            ServiceNotificationIdentifiers.ResourceTypesControllerGetArgumentException);
-                    monitor.Report(notification);
-                }
+                this.Logger.LogScimFailure(
+                    ScimEventIds.ResourceTypesGetArgumentException,
+                    argumentException,
+                    correlationIdentifier);
 
                 throw new HttpResponseException(HttpStatusCode.BadRequest);
             }
             catch (NotImplementedException notImplementedException)
             {
-                if (this.TryGetMonitor(out IMonitor monitor))
-                {
-                    IExceptionNotification notification =
-                        ExceptionNotificationFactory.Instance.CreateNotification(
-                            notImplementedException,
-                            correlationIdentifier,
-                            ServiceNotificationIdentifiers.ResourceTypesControllerGetNotImplementedException);
-                    monitor.Report(notification);
-                }
+                this.Logger.LogScimFailure(
+                    ScimEventIds.ResourceTypesGetNotImplementedException,
+                    notImplementedException,
+                    correlationIdentifier);
 
                 throw new HttpResponseException(HttpStatusCode.NotImplemented);
             }
             catch (NotSupportedException notSupportedException)
             {
-                if (this.TryGetMonitor(out IMonitor monitor))
-                {
-                    IExceptionNotification notification =
-                       ExceptionNotificationFactory.Instance.CreateNotification(
-                           notSupportedException,
-                           correlationIdentifier,
-                           ServiceNotificationIdentifiers.ResourceTypesControllerGetNotSupportedException);
-                    monitor.Report(notification);
-                }
+                this.Logger.LogScimFailure(
+                    ScimEventIds.ResourceTypesGetNotSupportedException,
+                    notSupportedException,
+                    correlationIdentifier);
 
                 throw new HttpResponseException(HttpStatusCode.NotImplemented);
             }
             catch (Exception exception)
             {
-                if (this.TryGetMonitor(out IMonitor monitor))
-                {
-                    IExceptionNotification notification =
-                       ExceptionNotificationFactory.Instance.CreateNotification(
-                           exception,
-                           correlationIdentifier,
-                           ServiceNotificationIdentifiers.ResourceTypesControllerGetException);
-                    monitor.Report(notification);
-                }
+                this.Logger.LogScimFailure(
+                    ScimEventIds.ResourceTypesGetException,
+                    exception,
+                    correlationIdentifier);
 
                 throw;
             }
@@ -243,57 +193,37 @@ namespace Microsoft.SCIM
             }
             catch (ArgumentException argumentException)
             {
-                if (this.TryGetMonitor(out IMonitor monitor))
-                {
-                    IExceptionNotification notification =
-                        ExceptionNotificationFactory.Instance.CreateNotification(
-                            argumentException,
-                            correlationIdentifier,
-                            ServiceNotificationIdentifiers.ServiceProviderConfigurationControllerGetArgumentException);
-                    monitor.Report(notification);
-                }
+                this.Logger.LogScimFailure(
+                    ScimEventIds.ServiceProviderConfigurationGetArgumentException,
+                    argumentException,
+                    correlationIdentifier);
 
                 throw new HttpResponseException(HttpStatusCode.BadRequest);
             }
             catch (NotImplementedException notImplementedException)
             {
-                if (this.TryGetMonitor(out IMonitor monitor))
-                {
-                    IExceptionNotification notification =
-                        ExceptionNotificationFactory.Instance.CreateNotification(
-                            notImplementedException,
-                            correlationIdentifier,
-                            ServiceNotificationIdentifiers.ServiceProviderConfigurationControllerGetNotImplementedException);
-                    monitor.Report(notification);
-                }
+                this.Logger.LogScimFailure(
+                    ScimEventIds.ServiceProviderConfigurationGetNotImplementedException,
+                    notImplementedException,
+                    correlationIdentifier);
 
                 throw new HttpResponseException(HttpStatusCode.NotImplemented);
             }
             catch (NotSupportedException notSupportedException)
             {
-                if (this.TryGetMonitor(out IMonitor monitor))
-                {
-                    IExceptionNotification notification =
-                        ExceptionNotificationFactory.Instance.CreateNotification(
-                            notSupportedException,
-                            correlationIdentifier,
-                            ServiceNotificationIdentifiers.ServiceProviderConfigurationControllerGetNotSupportedException);
-                    monitor.Report(notification);
-                }
+                this.Logger.LogScimFailure(
+                    ScimEventIds.ServiceProviderConfigurationGetNotSupportedException,
+                    notSupportedException,
+                    correlationIdentifier);
 
                 throw new HttpResponseException(HttpStatusCode.NotImplemented);
             }
             catch (Exception exception)
             {
-                if (this.TryGetMonitor(out IMonitor monitor))
-                {
-                    IExceptionNotification notification =
-                        ExceptionNotificationFactory.Instance.CreateNotification(
-                            exception,
-                            correlationIdentifier,
-                            ServiceNotificationIdentifiers.ServiceProviderConfigurationControllerGetException);
-                    monitor.Report(notification);
-                }
+                this.Logger.LogScimFailure(
+                    ScimEventIds.ServiceProviderConfigurationGetException,
+                    exception,
+                    correlationIdentifier);
 
                 throw;
             }
@@ -329,57 +259,37 @@ namespace Microsoft.SCIM
             }
             catch (ArgumentException argumentException)
             {
-                if (this.TryGetMonitor(out IMonitor monitor))
-                {
-                    IExceptionNotification notification =
-                        ExceptionNotificationFactory.Instance.CreateNotification(
-                            argumentException,
-                            correlationIdentifier,
-                            ServiceNotificationIdentifiers.BulkRequest2ControllerPostArgumentException);
-                    monitor.Report(notification);
-                }
+                this.Logger.LogScimFailure(
+                    ScimEventIds.BulkRequestPostArgumentException,
+                    argumentException,
+                    correlationIdentifier);
 
                 throw new HttpResponseException(HttpStatusCode.BadRequest);
             }
             catch (NotImplementedException notImplementedException)
             {
-                if (this.TryGetMonitor(out IMonitor monitor))
-                {
-                    IExceptionNotification notification =
-                        ExceptionNotificationFactory.Instance.CreateNotification(
-                            notImplementedException,
-                            correlationIdentifier,
-                            ServiceNotificationIdentifiers.BulkRequest2ControllerPostNotImplementedException);
-                    monitor.Report(notification);
-                }
+                this.Logger.LogScimFailure(
+                    ScimEventIds.BulkRequestPostNotImplementedException,
+                    notImplementedException,
+                    correlationIdentifier);
 
                 throw new HttpResponseException(HttpStatusCode.NotImplemented);
             }
             catch (NotSupportedException notSupportedException)
             {
-                if (this.TryGetMonitor(out IMonitor monitor))
-                {
-                    IExceptionNotification notification =
-                        ExceptionNotificationFactory.Instance.CreateNotification(
-                            notSupportedException,
-                            correlationIdentifier,
-                            ServiceNotificationIdentifiers.BulkRequest2ControllerPostNotSupportedException);
-                    monitor.Report(notification);
-                }
+                this.Logger.LogScimFailure(
+                    ScimEventIds.BulkRequestPostNotSupportedException,
+                    notSupportedException,
+                    correlationIdentifier);
 
                 throw new HttpResponseException(HttpStatusCode.NotImplemented);
             }
             catch (Exception exception)
             {
-                if (this.TryGetMonitor(out IMonitor monitor))
-                {
-                    IExceptionNotification notification =
-                        ExceptionNotificationFactory.Instance.CreateNotification(
-                            exception,
-                            correlationIdentifier,
-                            ServiceNotificationIdentifiers.BulkRequest2ControllerPostException);
-                    monitor.Report(notification);
-                }
+                this.Logger.LogScimFailure(
+                    ScimEventIds.BulkRequestPostException,
+                    exception,
+                    correlationIdentifier);
 
                 throw;
             }

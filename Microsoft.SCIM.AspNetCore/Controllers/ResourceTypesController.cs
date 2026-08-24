@@ -4,6 +4,7 @@ namespace Microsoft.SCIM
 {
     using Microsoft.AspNetCore.Authorization;
     using Microsoft.AspNetCore.Mvc;
+    using Microsoft.Extensions.Logging;
 
     [Route(ServiceConstants.RouteResourceTypes)]
     [Authorize]
@@ -12,9 +13,9 @@ namespace Microsoft.SCIM
     {
         private readonly ScimDiscoveryRequestHandler handler;
 
-        public ResourceTypesController(IProvider provider, IMonitor monitor)
+        public ResourceTypesController(IProvider provider, ILogger<ResourceTypesController> logger)
         {
-            this.handler = ScimRequestHandlerFactory.CreateDiscoveryHandler(provider, monitor);
+            this.handler = ScimRequestHandlerFactory.CreateDiscoveryHandler(provider, logger);
         }
 
         [HttpGet]

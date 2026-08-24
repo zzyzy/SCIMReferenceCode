@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Edupass-specific SCIM behaviour: the User extension schema, its attribute validation,
+    the discovery payloads that advertise it, and the JWT/JWKS authentication Edupass
+    requires. None of it belongs in Microsoft.SCIM, which implements RFC 7643/7644 and
+    nothing beyond.
+  -->
+  <PropertyGroup>
+    <TargetFrameworks>net48;net10.0</TargetFrameworks>
+    <AssemblyName>SCIM.EduPass</AssemblyName>
+    <RootNamespace>Scim.EduPass</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Microsoft.SystemForCrossDomainIdentityManagement\Microsoft.SCIM.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+    <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.14.0" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.14.0" />
+  </ItemGroup>
+
+  <!--
+    One hosting project per MVC framework, exactly as the sample hosts do. The controllers
+    are #if-guarded on NET48 so that each target compiles only the one it can.
+  -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <ProjectReference Include="..\Microsoft.SCIM.AspNet\Microsoft.SCIM.AspNet.csproj" />
+    <PackageReference Include="Microsoft.AspNet.WebApi.Core" Version="5.2.9" />
+    <PackageReference Include="Microsoft.Owin.Security.Jwt" Version="4.2.2" />
+    <Reference Include="System.Web" />
+    <Reference Include="System.Net.Http" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <ProjectReference Include="..\Microsoft.SCIM.AspNetCore\Microsoft.SCIM.AspNetCore.csproj" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.0" />
+  </ItemGroup>
+
+</Project>

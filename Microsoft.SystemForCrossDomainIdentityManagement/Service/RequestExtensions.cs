@@ -12,11 +12,14 @@ namespace Microsoft.SCIM
 
     public static class RequestExtensions
     {
-        private const string SegmentInterface =
-            RequestExtensions.SegmentSeparator +
-            SchemaConstants.PathInterface +
-            RequestExtensions.SegmentSeparator;
         private const string SegmentSeparator = "/";
+
+        // Not a constant: the interface segment is configurable at startup through
+        // ScimPath.SetPrefix, so this has to be read per call rather than baked in.
+        private static string SegmentInterface =>
+            RequestExtensions.SegmentSeparator +
+            ScimPath.Prefix +
+            RequestExtensions.SegmentSeparator;
 
         private readonly static Lazy<char[]> SegmentSeparators =
             new Lazy<char[]>(
@@ -36,7 +39,7 @@ namespace Microsoft.SCIM
                     RequestExtensions.SegmentSeparators.Value,
                     StringSplitOptions.RemoveEmptyEntries)
                 .Last();
-            if (string.Equals(lastSegment, SchemaConstants.PathInterface, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(lastSegment, ScimPath.Prefix, StringComparison.OrdinalIgnoreCase))
             {
                 return request.RequestUri;
             }

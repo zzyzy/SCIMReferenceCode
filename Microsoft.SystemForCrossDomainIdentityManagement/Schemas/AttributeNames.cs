@@ -1,4 +1,4 @@
-﻿//------------------------------------------------------------
+//------------------------------------------------------------
 // Copyright (c) Microsoft Corporation.  All rights reserved.
 //------------------------------------------------------------
 
@@ -37,6 +37,7 @@ namespace Microsoft.SCIM
         public const string FamilyName = "familyName";
         public const string Filter = "filter";
         public const string GivenName = "givenName";
+        public const string Groups = "groups";
         public const string Formatted = "formatted";
         public const string HonorificPrefix = "honorificPrefix";
         public const string HonorificSuffix = "honorificSuffix";
@@ -52,8 +53,10 @@ namespace Microsoft.SCIM
         public const string Manager = "manager";
         public const string ManagerId = "managerId";
         public const string MaximumOperations = "maxOperations";
+        public const string MaximumResults = "maxResults";
         public const string MaximumPayloadSize = "maxPayloadSize";
         public const string Members = "members";
+        public const string Reference = "$ref";
         public const string Metadata = "meta";
         public const string Mutability = "mutability";
         public const string Name = "name";

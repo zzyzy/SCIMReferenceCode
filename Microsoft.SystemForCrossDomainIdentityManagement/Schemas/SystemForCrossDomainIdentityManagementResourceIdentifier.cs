@@ -1,4 +1,4 @@
-﻿//------------------------------------------------------------
+//------------------------------------------------------------
 // Copyright (c) Microsoft Corporation.  All rights reserved.
 //------------------------------------------------------------
 
@@ -47,7 +47,7 @@ namespace Microsoft.SCIM
                 segmentsIndexed
                 .LastOrDefault(
                     (item) =>
-                        item.Segment.Equals(SchemaConstants.PathInterface, StringComparison.OrdinalIgnoreCase));
+                        item.Segment.Equals(ScimPath.Prefix, StringComparison.OrdinalIgnoreCase));
             if (null == segmentSystemForCrossDomainIdentityManagement)
             {
                 if (identifier.IsAbsoluteUri)

@@ -16,7 +16,20 @@ namespace Microsoft.SCIM
     /// </summary>
     public static class ScimHttpConfiguration
     {
-        public static HttpConfiguration Configure(HttpConfiguration configuration, IServiceProvider services)
+        /// <param name="pathPrefix">
+        /// The URL segment to serve the SCIM endpoints under. Defaults to <c>scim</c> when
+        /// null or blank. See <see cref="ScimPath"/>.
+        /// </param>
+        /// <param name="suppressedControllerTypes">
+        /// Controllers in this assembly that must not be discovered, so that a downstream
+        /// library can serve the same route with its own. See the ASP.NET Core counterpart in
+        /// <c>ScimServiceCollectionExtensions.AddScim</c>.
+        /// </param>
+        public static HttpConfiguration Configure(
+            HttpConfiguration configuration,
+            IServiceProvider services,
+            string pathPrefix = null,
+            params Type[] suppressedControllerTypes)
         {
             if (null == configuration)
             {
@@ -26,6 +39,11 @@ namespace Microsoft.SCIM
             if (null == services)
             {
                 throw new ArgumentNullException(nameof(services));
+            }
+
+            if (!string.IsNullOrWhiteSpace(pathPrefix))
+            {
+                ScimPath.SetPrefix(pathPrefix);
             }
 
             configuration.DependencyResolver = new ServiceProviderDependencyResolver(services);
@@ -48,11 +66,19 @@ namespace Microsoft.SCIM
             // ScimDirectRouteProvider rather than the default one so that the [Route]
             // attributes declared on ScimApiResourceControllerBase<T> are inherited by the
             // concrete controllers, as they are on ASP.NET Core.
+            if (null != suppressedControllerTypes && suppressedControllerTypes.Length > 0)
+            {
+                configuration.Services.Replace(
+                    typeof(IHttpControllerTypeResolver),
+                    new ScimSuppressedControllerTypeResolver(suppressedControllerTypes));
+            }
+
             configuration.MapHttpAttributeRoutes(new ScimDirectRouteProvider());
 
             // Match the ASP.NET Core leg's Newtonsoft settings exactly.
             JsonMediaTypeFormatter jsonFormatter = configuration.Formatters.JsonFormatter;
             jsonFormatter.SerializerSettings.NullValueHandling = NullValueHandling.Ignore;
+            jsonFormatter.SerializerSettings.Converters.Add(new SchematizedJsonConverter());
             jsonFormatter.SupportedMediaTypes.Add(new MediaTypeHeaderValue(ProtocolConstants.ContentType));
 
             // ASP.NET Core has no XML formatter, so Web API's would make

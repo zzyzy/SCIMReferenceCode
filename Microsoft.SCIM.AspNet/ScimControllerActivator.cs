@@ -17,7 +17,7 @@ namespace Microsoft.SCIM
     /// dependency resolver for the controller type, and because controllers are not - and on
     /// the ASP.NET Core leg need not be - registered in the container, that lookup returns
     /// null and activation falls back to <c>new()</c>. Every SCIM controller takes
-    /// <see cref="IProvider"/> and <see cref="IMonitor"/>, so the fallback throws.
+    /// <see cref="IProvider"/> and an <c>ILogger&lt;T&gt;</c>, so the fallback throws.
     /// ASP.NET Core solves this with <c>ActivatorUtilities</c>, which constructs an
     /// unregistered type from registered dependencies; doing the same here keeps the two legs
     /// registering exactly the same services.

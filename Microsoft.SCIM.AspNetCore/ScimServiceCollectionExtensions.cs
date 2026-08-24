@@ -5,6 +5,8 @@ namespace Microsoft.SCIM
     using System;
     using Microsoft.AspNetCore.Builder;
     using Microsoft.AspNetCore.Mvc;
+    using Microsoft.AspNetCore.Mvc.ApplicationParts;
+    using Microsoft.AspNetCore.Mvc.Controllers;
     using Microsoft.AspNetCore.Routing;
     using Microsoft.Extensions.DependencyInjection;
     using Newtonsoft.Json;
@@ -15,19 +17,33 @@ namespace Microsoft.SCIM
     public static class ScimServiceCollectionExtensions
     {
         /// <summary>
-        /// Registers the SCIM provider, the monitor, the controllers and the
-        /// <see cref="ScimExceptionFilter"/>.
+        /// Registers the SCIM provider, the controllers and the
+        /// <see cref="ScimExceptionFilter"/>. Controllers resolve their own
+        /// <c>ILogger&lt;T&gt;</c>, so the host's existing logging configuration is used as-is.
         /// </summary>
+        /// <param name="pathPrefix">
+        /// The URL segment to serve the SCIM endpoints under. Defaults to <c>scim</c> when
+        /// null or blank. See <see cref="ScimPath"/>.
+        /// </param>
         /// <remarks>
         /// <c>AddApplicationPart</c> is load-bearing: the SCIM controllers live in this
         /// assembly, not in the entry assembly, and MVC only discovers controllers in
         /// application parts. Without it every SCIM route returns 404 while the host starts
         /// up perfectly happily. See MULTI-TARGET-PLAN.md R3.
         /// </remarks>
+        /// <param name="suppressedControllerTypes">
+        /// Controllers in this assembly that must not be discovered, so that a downstream
+        /// library can serve the same route with its own. Pass
+        /// <c>typeof(UsersController)</c> to replace the built-in Users endpoint - it binds the
+        /// sealed <c>Core2EnterpriseUser</c>, so a service whose User resource carries an
+        /// extension has to supply its own controller, and two controllers cannot share a
+        /// route.
+        /// </param>
         public static IServiceCollection AddScim(
             this IServiceCollection services,
             IProvider provider,
-            IMonitor monitor)
+            string pathPrefix = null,
+            params Type[] suppressedControllerTypes)
         {
             if (null == services)
             {
@@ -39,19 +55,28 @@ namespace Microsoft.SCIM
                 throw new ArgumentNullException(nameof(provider));
             }
 
-            if (null == monitor)
+            if (!string.IsNullOrWhiteSpace(pathPrefix))
             {
-                throw new ArgumentNullException(nameof(monitor));
+                ScimPath.SetPrefix(pathPrefix);
             }
 
             services.AddSingleton(typeof(IProvider), provider);
-            services.AddSingleton(typeof(IMonitor), monitor);
 
-            void ConfigureMvcOptions(MvcOptions options) =>
+            void ConfigureMvcOptions(MvcOptions options)
+            {
                 options.Filters.Add(new ScimExceptionFilter());
+                options.Conventions.Add(new ScimRouteConvention());
+            }
 
-            void ConfigureMvcNewtonsoftJsonOptions(MvcNewtonsoftJsonOptions options) =>
+            void ConfigureMvcNewtonsoftJsonOptions(MvcNewtonsoftJsonOptions options)
+            {
                 options.SerializerSettings.NullValueHandling = NullValueHandling.Ignore;
+
+                // Untyped schema extensions are invisible to the default contract; without this
+                // an extension the service was not compiled against is dropped in both
+                // directions. See SchematizedJsonConverter.
+                options.SerializerSettings.Converters.Add(new SchematizedJsonConverter());
+            }
 
             // [ApiController]'s automatic 400 emits a ValidationProblemDetails body, which
             // ASP.NET Web API has no equivalent for. Suppressing it lets an unparseable body
@@ -66,6 +91,12 @@ namespace Microsoft.SCIM
             {
                 options.SuppressModelStateInvalidFilter = true;
                 options.SuppressMapClientErrors = true;
+            }
+
+            if (null != suppressedControllerTypes && suppressedControllerTypes.Length > 0)
+            {
+                services.AddSingleton<IApplicationFeatureProvider<ControllerFeature>>(
+                    new ScimSuppressedControllerFeatureProvider(suppressedControllerTypes));
             }
 
             services

@@ -248,9 +248,15 @@ namespace Microsoft.SCIM.WebHostSample.Provider
 
             if (this.storage.Groups.TryGetValue(patch.ResourceIdentifier.Identifier, out Core2Group group))
             {
-                group.Apply(patchRequest);
-                // Update metadata
-                group.Metadata.LastModified = DateTime.UtcNow;
+                // RFC 7644 section 3.5.2: all of the operations, or none. Apply.Apply mutates
+                // in order, so a failure part-way through would otherwise leave the earlier
+                // operations applied. Patch a copy and publish it only once every operation
+                // has succeeded.
+                Core2Group candidate = ResourceCloner.Clone(group);
+                candidate.Apply(patchRequest);
+                candidate.Metadata.LastModified = DateTime.UtcNow;
+
+                this.storage.Groups[patch.ResourceIdentifier.Identifier] = candidate;
             }
             else
             {

@@ -1,9 +1,10 @@
-﻿//------------------------------------------------------------
+//------------------------------------------------------------
 // Copyright (c) Microsoft Corporation.  All rights reserved.
 //------------------------------------------------------------
 
 namespace Microsoft.SCIM
 {
+    using System.Globalization;
     using System.Runtime.Serialization;
 
     [DataContract]
@@ -18,8 +19,8 @@ namespace Microsoft.SCIM
             this.AddSchema(ProtocolSchemaIdentifiers.Version2Error);
 
             this.Detail = detail;
-            this.Status = status;
-            this.ScimType = scimType != null ? scimType : null;
+            this.Status = status.ToString(CultureInfo.InvariantCulture);
+            this.ScimType = scimType;
         }
     }
 }

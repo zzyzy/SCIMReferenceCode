@@ -1,4 +1,4 @@
-﻿//------------------------------------------------------------
+//------------------------------------------------------------
 // Copyright (c) Microsoft Corporation.  All rights reserved.
 //------------------------------------------------------------
 
@@ -56,6 +56,21 @@ namespace Microsoft.SCIM
 
         [DataMember(Name = AttributeNames.ElectronicMailAddresses, IsRequired = false, EmitDefaultValue = false)]
         public virtual IEnumerable<ElectronicMailAddress> ElectronicMailAddresses
+        {
+            get;
+            set;
+        }
+
+        /// <summary>
+        /// The groups the user belongs to (RFC 7643 section 4.1.2).
+        /// </summary>
+        /// <remarks>
+        /// Read-only per the RFC: membership is changed through the Group resource's
+        /// <c>members</c> attribute, not here. It is a provider's job to populate this on
+        /// read - the shared library has no way to know how a store relates the two.
+        /// </remarks>
+        [DataMember(Name = AttributeNames.Groups, IsRequired = false, EmitDefaultValue = false)]
+        public virtual IEnumerable<UserGroup> Groups
         {
             get;
             set;

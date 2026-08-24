@@ -1,4 +1,4 @@
-﻿//------------------------------------------------------------
+//------------------------------------------------------------
 // Copyright (c) Microsoft Corporation.  All rights reserved.
 //------------------------------------------------------------
 
@@ -22,6 +22,20 @@ namespace Microsoft.SCIM
 
         [DataMember(Name = AttributeNames.Value)]
         public string Value
+        {
+            get;
+            set;
+        }
+
+        [DataMember(Name = AttributeNames.Reference, IsRequired = false, EmitDefaultValue = false)]
+        public string Reference
+        {
+            get;
+            set;
+        }
+
+        [DataMember(Name = AttributeNames.Display, IsRequired = false, EmitDefaultValue = false)]
+        public string Display
         {
             get;
             set;

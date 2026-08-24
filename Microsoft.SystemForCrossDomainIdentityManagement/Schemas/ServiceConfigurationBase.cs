@@ -1,4 +1,4 @@
-﻿//------------------------------------------------------------
+//------------------------------------------------------------
 // Copyright (c) Microsoft Corporation.  All rights reserved.
 //------------------------------------------------------------
 
@@ -54,7 +54,7 @@ namespace Microsoft.SCIM
         }
 
         [DataMember(Name = AttributeNames.Filter)]
-        public Feature Filtering
+        public FilteringFeature Filtering
         {
             get;
             set;

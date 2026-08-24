@@ -80,6 +80,27 @@ and once against `scim/Groups` with `Core2Group` payloads.
 | U29 | Groups only: `PATCH` add a `members` value, then `GET` | **204** then **200** | — | the member present in `members` | RFC 7643 §4.2 |
 | U30 | Groups only: `PATCH` remove a `members` value, then `GET` | **204** then **200** | — | the member absent from `members` | RFC 7643 §4.2 |
 
+> **Note on U13-U15.** `attributes` and `excludedAttributes` were parsed and passed to the
+> provider but never applied to a response body; the sample providers ignored them and no
+> projection code existed. `ScimProjection` now applies both in the shared handler, on the
+> serialized JSON - nulling properties cannot express omitting a non-nullable member such as
+> `active`, nor reach a sub-attribute such as `name.formatted`. The Postman assertion for
+> `excludedAttributes=members` passed previously only because the sample group had no members.
+
+> **Note on U16.** `startIndex` was ignored: the sample user provider applied `Take(count)` and
+> `ProviderBase.PaginateQueryAsync` reported `startIndex: 1` and `itemsPerPage: totalResults`
+> unconditionally. The window is now applied in `PaginateQueryAsync`, which implies the contract
+> that `QueryAsync` returns every match - a provider that pages in its store overrides
+> `PaginateQueryAsync` instead.
+
+> **Note on U12.** A malformed filter returned **500**, not 400: `ResourceQuery.ParseFilters`
+> threw 406 and `QueryAsync` converted every non-404 `HttpResponseException` into a 500. It now
+> throws `ScimTypedException(BadRequest, invalidFilter)`, and `QueryAsync` preserves the thrown
+> status.
+
+> **Note on X10.** Error bodies now carry `scimType` (RFC 7644 section 3.12 requires it on a
+> 400), and `status` is a JSON string rather than a number, as that section specifies.
+
 > **Note on U28.** RFC 7644 §3.6 calls for 404 when deleting a resource that does not exist.
 > The sample providers (`InMemoryUserProvider.DeleteAsync`, `InMemoryGroupProvider.DeleteAsync`)
 > treat a missing identifier as a no-op and return success, so both legs answer **204**. This is

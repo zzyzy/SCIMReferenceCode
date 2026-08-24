@@ -210,13 +210,10 @@ namespace Microsoft.SCIM.WebHostSample.Provider
                 results = this.storage.Users.Values.Where(predicate.Compile());
             }
 
-            if (parameters.PaginationParameters != null)
-            {
-                int count = parameters.PaginationParameters.Count.HasValue ? parameters.PaginationParameters.Count.Value : 0;
-                return Task.FromResult(results.Take(count).ToArray());
-            }
-            else
-                return Task.FromResult(results.ToArray());
+            // Every match, not a page: ProviderBase.PaginateQueryAsync applies startIndex and
+            // count, and needs the full match count to report totalResults. Paging here as well
+            // reported the page size as the total, and ignored startIndex entirely.
+            return Task.FromResult(results.ToArray());
         }
 
         public override Task<Resource> ReplaceAsync(Resource resource, string correlationIdentifier)
@@ -328,10 +325,13 @@ namespace Microsoft.SCIM.WebHostSample.Provider
 
             if (this.storage.Users.TryGetValue(patch.ResourceIdentifier.Identifier, out Core2EnterpriseUser user))
             {
-                user.Apply(patchRequest);
+                // RFC 7644 section 3.5.2: all of the operations, or none. See the matching
+                // comment in InMemoryGroupProvider.UpdateAsync.
+                Core2EnterpriseUser candidate = ResourceCloner.Clone(user);
+                candidate.Apply(patchRequest);
+                candidate.Metadata.LastModified = DateTime.UtcNow;
 
-                // Update metadata
-                user.Metadata.LastModified = DateTime.UtcNow;
+                this.storage.Users[patch.ResourceIdentifier.Identifier] = candidate;
             }
             else
             {

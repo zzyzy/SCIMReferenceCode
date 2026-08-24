@@ -3,6 +3,7 @@
 namespace Microsoft.SCIM
 {
     using System;
+    using Microsoft.Extensions.Logging;
 
     /// <summary>
     /// Creates the hosting-neutral request handlers.
@@ -16,11 +17,11 @@ namespace Microsoft.SCIM
     /// </remarks>
     public static class ScimRequestHandlerFactory
     {
-        public static ScimRequestHandler<Core2EnterpriseUser> CreateUserHandler(IProvider provider, IMonitor monitor)
+        public static ScimRequestHandler<Core2EnterpriseUser> CreateUserHandler(IProvider provider, ILogger logger)
         {
             return new ScimRequestHandler<Core2EnterpriseUser>(
                 provider,
-                monitor,
+                logger,
                 (IProvider adapted) =>
                 {
                     if (null == adapted)
@@ -32,11 +33,11 @@ namespace Microsoft.SCIM
                 });
         }
 
-        public static ScimRequestHandler<Core2Group> CreateGroupHandler(IProvider provider, IMonitor monitor)
+        public static ScimRequestHandler<Core2Group> CreateGroupHandler(IProvider provider, ILogger logger)
         {
             return new ScimRequestHandler<Core2Group>(
                 provider,
-                monitor,
+                logger,
                 (IProvider adapted) =>
                 {
                     if (null == adapted)
@@ -48,11 +49,11 @@ namespace Microsoft.SCIM
                 });
         }
 
-        public static ScimRequestHandler<Resource> CreateRootHandler(IProvider provider, IMonitor monitor)
+        public static ScimRequestHandler<Resource> CreateRootHandler(IProvider provider, ILogger logger)
         {
             return new ScimRequestHandler<Resource>(
                 provider,
-                monitor,
+                logger,
                 (IProvider adapted) =>
                 {
                     if (null == adapted)
@@ -64,9 +65,9 @@ namespace Microsoft.SCIM
                 });
         }
 
-        public static ScimDiscoveryRequestHandler CreateDiscoveryHandler(IProvider provider, IMonitor monitor)
+        public static ScimDiscoveryRequestHandler CreateDiscoveryHandler(IProvider provider, ILogger logger)
         {
-            return new ScimDiscoveryRequestHandler(provider, monitor);
+            return new ScimDiscoveryRequestHandler(provider, logger);
         }
     }
 }

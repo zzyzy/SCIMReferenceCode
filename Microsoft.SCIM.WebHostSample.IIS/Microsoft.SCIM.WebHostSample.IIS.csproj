@@ -29,6 +29,7 @@
 
   <ItemGroup>
     <!-- The OWIN pipeline, hosted by System.Web rather than by HttpListener. -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.0" />
     <PackageReference Include="Microsoft.Owin.Host.SystemWeb" Version="4.2.2" />
     <PackageReference Include="Microsoft.AspNet.WebApi.Owin" Version="5.2.9" />
     <!-- The pre-existing application's own Web API surface, on GlobalConfiguration. -->
@@ -57,10 +58,8 @@
   <ItemGroup>
     <Compile Include="..\Microsoft.SCIM.WebHostSample\Provider\**\*.cs" Link="Provider\%(Filename)%(Extension)" />
     <Compile Include="..\Microsoft.SCIM.WebHostSample\Resources\**\*.cs" Link="Resources\%(Filename)%(Extension)" />
-    <Compile Include="..\Microsoft.SCIM.WebHostSample.Net48\Controllers\TokenController.cs"
-             Link="Controllers\TokenController.cs" />
-    <None Include="..\Microsoft.SCIM.WebHostSample\appsettings*.json" Link="%(Filename)%(Extension)"
-          CopyToOutputDirectory="PreserveNewest" />
+    <Compile Include="..\Microsoft.SCIM.WebHostSample.Net48\Controllers\TokenController.cs" Link="Controllers\TokenController.cs" />
+    <None Include="..\Microsoft.SCIM.WebHostSample\appsettings*.json" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

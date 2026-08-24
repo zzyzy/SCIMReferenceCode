@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -222,5 +222,11 @@ Supplied:
 {0}
 Received: 
 {1}</value>
+  </data>
+  <data name="ExceptionInvalidScimPathPrefix" xml:space="preserve">
+    <value>The SCIM path prefix must be a single non-empty URL segment containing no separator or whitespace.</value>
+  </data>
+  <data name="ExceptionScimPathPrefixAlreadyInUseTemplate" xml:space="preserve">
+    <value>The SCIM path prefix is already in use as '{0}' and cannot be changed to '{1}'. Set it during startup, before the first request is served.</value>
   </data>
 </root>

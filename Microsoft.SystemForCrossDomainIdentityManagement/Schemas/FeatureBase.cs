@@ -1,4 +1,4 @@
-﻿//------------------------------------------------------------
+//------------------------------------------------------------
 // Copyright (c) Microsoft Corporation.  All rights reserved.
 //------------------------------------------------------------
 
@@ -10,7 +10,7 @@ namespace Microsoft.SCIM
     public abstract class FeatureBase
     {
         [DataMember(Name = AttributeNames.Supported)]
-        public bool Supported
+        public virtual bool Supported
         {
             get;
             set;

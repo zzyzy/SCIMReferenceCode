@@ -10,6 +10,7 @@ namespace Microsoft.SCIM.WebHostSample
     using System.Web.Http;
     using Microsoft.Extensions.Configuration;
     using Microsoft.Extensions.DependencyInjection;
+    using Microsoft.Extensions.Logging;
     using Microsoft.IdentityModel.Tokens;
     using Microsoft.Owin.Security.Jwt;
     using Microsoft.Owin.Security.OAuth;
@@ -50,18 +51,19 @@ namespace Microsoft.SCIM.WebHostSample
             bool isDevelopment =
                 string.Equals(environmentName, Startup.EnvironmentNameDevelopment, StringComparison.OrdinalIgnoreCase);
 
-            IMonitor monitor = new ConsoleMonitor();
             IProvider provider = new InMemoryProvider();
 
             // Identical registration lines to the net10.0 sample - that is the point of
             // bridging MEDI onto Web API's IDependencyResolver. See MULTI-TARGET-PLAN.md D9.
             ServiceCollection services = new ServiceCollection();
             services.AddSingleton(typeof(IProvider), provider);
-            services.AddSingleton(typeof(IMonitor), monitor);
+            services.AddLogging(builder => builder.AddConsole());
             services.AddSingleton(typeof(IConfiguration), configuration);
             IServiceProvider serviceProvider = services.BuildServiceProvider();
 
-            app.Use<MonitoringMiddleware>(monitor);
+            app.Use<RequestLoggingMiddleware>(
+                serviceProvider.GetRequiredService<ILoggerFactory>()
+                    .CreateLogger<RequestLoggingMiddleware>());
 
             Startup.ConfigureAuthentication(app, configuration, isDevelopment);
 

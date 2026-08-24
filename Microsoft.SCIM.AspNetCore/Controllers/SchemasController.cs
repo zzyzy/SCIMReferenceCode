@@ -4,6 +4,7 @@ namespace Microsoft.SCIM
 {
     using Microsoft.AspNetCore.Authorization;
     using Microsoft.AspNetCore.Mvc;
+    using Microsoft.Extensions.Logging;
 
     [Route(ServiceConstants.RouteSchemas)]
     [Authorize]
@@ -12,9 +13,9 @@ namespace Microsoft.SCIM
     {
         private readonly ScimDiscoveryRequestHandler handler;
 
-        public SchemasController(IProvider provider, IMonitor monitor)
+        public SchemasController(IProvider provider, ILogger<SchemasController> logger)
         {
-            this.handler = ScimRequestHandlerFactory.CreateDiscoveryHandler(provider, monitor);
+            this.handler = ScimRequestHandlerFactory.CreateDiscoveryHandler(provider, logger);
         }
 
         [HttpGet]

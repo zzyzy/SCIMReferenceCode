@@ -4,6 +4,7 @@ namespace Microsoft.SCIM
 {
     using Microsoft.AspNetCore.Authorization;
     using Microsoft.AspNetCore.Mvc;
+    using Microsoft.Extensions.Logging;
 
     /// <summary>
     /// The SCIM service root.
@@ -21,8 +22,8 @@ namespace Microsoft.SCIM
     [ApiController]
     public sealed class RootController : ScimResourceControllerBase<Resource>
     {
-        public RootController(IProvider provider, IMonitor monitor)
-            : base(ScimRequestHandlerFactory.CreateRootHandler(provider, monitor))
+        public RootController(IProvider provider, ILogger<RootController> logger)
+            : base(ScimRequestHandlerFactory.CreateRootHandler(provider, logger))
         {
         }
     }

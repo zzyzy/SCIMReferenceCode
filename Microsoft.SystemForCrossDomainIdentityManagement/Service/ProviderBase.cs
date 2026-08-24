@@ -153,6 +153,26 @@ namespace Microsoft.SCIM
             await this.DeleteAsync(request.Payload, request.CorrelationIdentifier).ConfigureAwait(false);
         }
 
+        /// <summary>
+        /// Applies the <c>startIndex</c> and <c>count</c> window of RFC 7644 section 3.4.2.4 to
+        /// what <see cref="QueryAsync(IRequest{IQueryParameters})"/> returned.
+        /// </summary>
+        /// <remarks>
+        /// The contract this implies: <c>QueryAsync</c> returns every resource matching the
+        /// filter, and the window is applied here. That is what the in-memory sample provider
+        /// does, and it is the only arrangement in which this base class can report
+        /// <c>totalResults</c> honestly - the RFC wants the full match count, not the size of
+        /// the page.
+        ///
+        /// A provider that pages in its store - which any provider over a real database should,
+        /// rather than materializing every match - overrides this method instead, and is then
+        /// responsible for <c>totalResults</c>, <c>startIndex</c> and <c>itemsPerPage</c>
+        /// itself.
+        ///
+        /// The previous implementation reported <c>startIndex: 1</c> and
+        /// <c>itemsPerPage: totalResults</c> unconditionally, so a paged request was answered
+        /// with metadata describing a single unpaged page.
+        /// </remarks>
         public virtual async Task<QueryResponseBase> PaginateQueryAsync(IRequest<IQueryParameters> request)
         {
             if (null == request)
@@ -161,11 +181,38 @@ namespace Microsoft.SCIM
             }
 
             IReadOnlyCollection<Resource> resources = await this.QueryAsync(request).ConfigureAwait(false);
-            QueryResponseBase result = new QueryResponse(resources);
-            result.TotalResults =
-                result.ItemsPerPage =
-                    resources.Count;
-            result.StartIndex = resources.Any() ? 1 : (int?)null;
+
+            int totalResults = resources.Count;
+
+            IPaginationParameters pagination = request.Payload?.PaginationParameters;
+
+            // RFC 7644 section 3.4.2.4: startIndex is 1-based and anything below 1 is treated
+            // as 1; a negative count is treated as 0. An absent count means the server decides,
+            // and this base class returns the remainder rather than imposing a limit.
+            int startIndex = pagination?.StartIndex ?? 1;
+            if (startIndex < 1)
+            {
+                startIndex = 1;
+            }
+
+            int? count = pagination?.Count;
+            if (count.HasValue && count.Value < 0)
+            {
+                count = 0;
+            }
+
+            IEnumerable<Resource> page = resources.Skip(startIndex - 1);
+            if (count.HasValue)
+            {
+                page = page.Take(count.Value);
+            }
+
+            IReadOnlyCollection<Resource> paged = page.ToArray();
+
+            QueryResponseBase result = new QueryResponse(paged);
+            result.TotalResults = totalResults;
+            result.ItemsPerPage = paged.Count;
+            result.StartIndex = startIndex;
             return result;
         }
 

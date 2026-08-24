@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNet.WebApi.OwinSelfHost" Version="5.2.9" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.0" />
     <!-- IAppBuilder. Transitive, but referenced directly because Startup.cs names it. -->
     <PackageReference Include="Owin" Version="1.0.0" />
     <PackageReference Include="Microsoft.Owin.Security.Jwt" Version="4.2.2" />
@@ -38,8 +39,7 @@
     <Compile Include="..\Microsoft.SCIM.WebHostSample\Provider\**\*.cs" Link="Provider\%(Filename)%(Extension)" />
     <Compile Include="..\Microsoft.SCIM.WebHostSample\Resources\**\*.cs" Link="Resources\%(Filename)%(Extension)" />
     <Compile Include="..\Microsoft.SCIM.WebHostSample\SampleStartupBanner.cs" Link="SampleStartupBanner.cs" />
-    <None Include="..\Microsoft.SCIM.WebHostSample\appsettings*.json" Link="%(Filename)%(Extension)"
-          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\Microsoft.SCIM.WebHostSample\appsettings*.json" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

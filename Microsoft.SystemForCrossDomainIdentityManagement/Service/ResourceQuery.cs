@@ -189,7 +189,10 @@ namespace Microsoft.SCIM
 
             if (!Filter.TryParse(filterExpression, out IReadOnlyCollection<IFilter> results))
             {
-                throw new HttpResponseException(HttpStatusCode.NotAcceptable);
+                // RFC 7644 section 3.4.2.2: an unparseable filter is a 400 with scimType
+                // invalidFilter. This used to throw 406, which ScimRequestHandler.QueryAsync
+                // then turned into a 500.
+                throw new ScimTypedException(HttpStatusCode.BadRequest, ScimTypes.InvalidFilter);
             }
 
             return results;
