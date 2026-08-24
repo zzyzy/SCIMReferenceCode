@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
+﻿// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
 
 namespace Microsoft.SCIM
 {
@@ -16,6 +16,28 @@ namespace Microsoft.SCIM
     /// </summary>
     public static class ScimHttpConfiguration
     {
+        /// <summary>
+        /// Configures the SCIM endpoints with <c>/Users</c> bound to <typeparamref name="T"/>,
+        /// a type derived from <see cref="Core2EnterpriseUser"/> that carries a schema
+        /// extension. Suppresses <see cref="UsersController"/> and registers
+        /// <see cref="ScimUsersApiController{T}"/> closed over that type, so a downstream
+        /// library needs no controller of its own.
+        /// </summary>
+        public static HttpConfiguration Configure<T>(
+            HttpConfiguration configuration,
+            IServiceProvider services,
+            string pathPrefix = null)
+            where T : Core2EnterpriseUser
+        {
+            return
+                ScimHttpConfiguration.Configure(
+                    configuration,
+                    services,
+                    pathPrefix,
+                    new[] { typeof(UsersController) },
+                    new[] { typeof(ScimUsersApiController<T>) });
+        }
+
         /// <param name="pathPrefix">
         /// The URL segment to serve the SCIM endpoints under. Defaults to <c>scim</c> when
         /// null or blank. See <see cref="ScimPath"/>.
@@ -30,6 +52,22 @@ namespace Microsoft.SCIM
             IServiceProvider services,
             string pathPrefix = null,
             params Type[] suppressedControllerTypes)
+        {
+            return
+                ScimHttpConfiguration.Configure(
+                    configuration,
+                    services,
+                    pathPrefix,
+                    suppressedControllerTypes,
+                    null);
+        }
+
+        private static HttpConfiguration Configure(
+            HttpConfiguration configuration,
+            IServiceProvider services,
+            string pathPrefix,
+            Type[] suppressedControllerTypes,
+            Type[] addedControllerTypes)
         {
             if (null == configuration)
             {
@@ -66,11 +104,16 @@ namespace Microsoft.SCIM
             // ScimDirectRouteProvider rather than the default one so that the [Route]
             // attributes declared on ScimApiResourceControllerBase<T> are inherited by the
             // concrete controllers, as they are on ASP.NET Core.
-            if (null != suppressedControllerTypes && suppressedControllerTypes.Length > 0)
+            bool suppressing = null != suppressedControllerTypes && suppressedControllerTypes.Length > 0;
+            bool adding = null != addedControllerTypes && addedControllerTypes.Length > 0;
+
+            if (suppressing || adding)
             {
                 configuration.Services.Replace(
                     typeof(IHttpControllerTypeResolver),
-                    new ScimSuppressedControllerTypeResolver(suppressedControllerTypes));
+                    new ScimSuppressedControllerTypeResolver(
+                        suppressedControllerTypes,
+                        addedControllerTypes));
             }
 
             configuration.MapHttpAttributeRoutes(new ScimDirectRouteProvider());

@@ -93,37 +93,28 @@ untyped extension.
 
 ### Replacing the `/Users` controller
 
-`Microsoft.SCIM.UsersController` is `ScimResourceControllerBase<Core2EnterpriseUser>`, and the
-generic parameter is the model-binding type - `[FromBody] T resource`. Binding constructs the
-declared type, so that controller produces a `Core2EnterpriseUser` and drops the extension no
-matter what `EduPassUser` derives from. A derived User type needs its own closed generic, and
-two controllers cannot share a route. Suppress the built-in one and let `SCIM.EduPass` serve
-`/Users`:
+A controller's generic parameter is its model-binding type — `[FromBody] T resource` — so the
+built-in `UsersController` binds a `Core2EnterpriseUser` and drops the extension. Name your
+resource type at registration and the hosting layer does the rest:
 
 ```csharp
 // ASP.NET Core
-builder.Services.AddScim(
-    provider,
-    pathPrefix: null,
-    typeof(Microsoft.SCIM.UsersController));
+builder.Services.AddScim<EduPassUser>(provider);
 
 // net48
-ScimHttpConfiguration.Configure(
-    httpConfiguration,
-    serviceProvider,
-    pathPrefix: null,
-    typeof(Microsoft.SCIM.UsersController));
+ScimHttpConfiguration.Configure<EduPassUser>(httpConfiguration, serviceProvider);
 ```
 
-`EduPassUsersController` then binds `EduPassUser`. It stays a three-line delegation to
-`ScimRequestHandlerFactory.CreateUserHandler<EduPassUser>(provider, logger)` — the controllers in
-this codebase name a resource type and delegate; behaviour lives in the handler and the provider.
+Each suppresses `Microsoft.SCIM.UsersController` and registers `ScimUsersController<EduPassUser>`
+(`ScimUsersApiController<EduPassUser>` on net48) in its place. **`SCIM.EduPass` contains no
+controller and no provider adapter** — the routes, the verb surface, the status codes and the
+error bodies all come from the hosting layer and `ScimRequestHandler<T>`.
 
-No provider adapter is needed. `CreateUserHandler<T>` is generic over `Core2EnterpriseUser`, so
-any derived resource type gets the enterprise adapter — same schema identifier, and `PATCH`
-answering 200 with the resource, which is what the specification requires of `/Users`.
-
----
+If you also need to decorate the controller — a rate-limiting filter, say — derive your own
+type from `ScimUsersController<EduPassUser>` and register that instead of the closed generic.
+Note that this path has not been exercised here: on net48 route attributes are inherited only
+because `ScimDirectRouteProvider` makes them so, and the equivalent on ASP.NET Core has not been
+tested. Verify routing before relying on it.
 
 ## 3. Your provider
 

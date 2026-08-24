@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
+﻿// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
 
 namespace Microsoft.SCIM
 {
@@ -16,6 +16,28 @@ namespace Microsoft.SCIM
     /// </summary>
     public static class ScimServiceCollectionExtensions
     {
+        /// <summary>
+        /// Registers the SCIM endpoints with <c>/Users</c> bound to <typeparamref name="T"/>, a
+        /// type derived from <see cref="Core2EnterpriseUser"/> that carries a schema extension.
+        /// Suppresses <see cref="UsersController"/> and registers
+        /// <see cref="ScimUsersController{T}"/> closed over that type, so a downstream library
+        /// needs no controller of its own.
+        /// </summary>
+        public static IServiceCollection AddScim<T>(
+            this IServiceCollection services,
+            IProvider provider,
+            string pathPrefix = null)
+            where T : Core2EnterpriseUser
+        {
+            return
+                ScimServiceCollectionExtensions.AddScim(
+                    services,
+                    provider,
+                    pathPrefix,
+                    new[] { typeof(UsersController) },
+                    new[] { typeof(ScimUsersController<T>) });
+        }
+
         /// <summary>
         /// Registers the SCIM provider, the controllers and the
         /// <see cref="ScimExceptionFilter"/>. Controllers resolve their own
@@ -44,6 +66,22 @@ namespace Microsoft.SCIM
             IProvider provider,
             string pathPrefix = null,
             params Type[] suppressedControllerTypes)
+        {
+            return
+                ScimServiceCollectionExtensions.AddScim(
+                    services,
+                    provider,
+                    pathPrefix,
+                    suppressedControllerTypes,
+                    null);
+        }
+
+        private static IServiceCollection AddScim(
+            this IServiceCollection services,
+            IProvider provider,
+            string pathPrefix,
+            Type[] suppressedControllerTypes,
+            Type[] addedControllerTypes)
         {
             if (null == services)
             {
@@ -93,17 +131,28 @@ namespace Microsoft.SCIM
                 options.SuppressMapClientErrors = true;
             }
 
-            if (null != suppressedControllerTypes && suppressedControllerTypes.Length > 0)
-            {
-                services.AddSingleton<IApplicationFeatureProvider<ControllerFeature>>(
-                    new ScimSuppressedControllerFeatureProvider(suppressedControllerTypes));
-            }
+            bool suppressing = null != suppressedControllerTypes && suppressedControllerTypes.Length > 0;
+            bool adding = null != addedControllerTypes && addedControllerTypes.Length > 0;
 
-            services
-                .AddControllers(ConfigureMvcOptions)
-                .AddNewtonsoftJson(ConfigureMvcNewtonsoftJsonOptions)
-                .AddApplicationPart(typeof(UsersController).Assembly)
-                .ConfigureApiBehaviorOptions(ConfigureApiBehaviorOptions);
+            IMvcBuilder builder =
+                services
+                    .AddControllers(ConfigureMvcOptions)
+                    .AddNewtonsoftJson(ConfigureMvcNewtonsoftJsonOptions)
+                    .AddApplicationPart(typeof(UsersController).Assembly)
+                    .ConfigureApiBehaviorOptions(ConfigureApiBehaviorOptions);
+
+            // ConfigureApplicationPartManager rather than a container registration: MVC reads
+            // its feature providers from the ApplicationPartManager, which is built before the
+            // container and does not consult it.
+            if (suppressing || adding)
+            {
+                builder.ConfigureApplicationPartManager(
+                    manager =>
+                        manager.FeatureProviders.Add(
+                            new ScimSuppressedControllerFeatureProvider(
+                                suppressedControllerTypes,
+                                addedControllerTypes)));
+            }
 
             return services;
         }

@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
+﻿// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
 
 namespace Microsoft.SCIM
 {
@@ -10,7 +10,7 @@ namespace Microsoft.SCIM
     using Microsoft.AspNetCore.Mvc.Controllers;
 
     /// <summary>
-    /// Removes named controllers from MVC's discovered set.
+    /// Adds and removes named controllers in MVC's discovered set.
     /// </summary>
     /// <remarks>
     /// The route templates are fixed at compile time, so a downstream library that needs to
@@ -21,16 +21,29 @@ namespace Microsoft.SCIM
     public sealed class ScimSuppressedControllerFeatureProvider : IApplicationFeatureProvider<ControllerFeature>
     {
         private readonly HashSet<TypeInfo> suppressed;
+        private readonly TypeInfo[] added;
 
         public ScimSuppressedControllerFeatureProvider(params Type[] suppressedControllerTypes)
+            : this(suppressedControllerTypes, null)
         {
-            if (null == suppressedControllerTypes)
-            {
-                throw new ArgumentNullException(nameof(suppressedControllerTypes));
-            }
+        }
 
+        /// <param name="addedControllerTypes">
+        /// Controllers to register that assembly scanning does not find. A closed generic such
+        /// as <c>ScimUsersController&lt;EduPassUser&gt;</c> is not discovered, because
+        /// <c>ControllerFeatureProvider</c> only considers types whose name ends in
+        /// <c>Controller</c>.
+        /// </param>
+        public ScimSuppressedControllerFeatureProvider(
+            Type[] suppressedControllerTypes,
+            Type[] addedControllerTypes)
+        {
             this.suppressed =
-                new HashSet<TypeInfo>(suppressedControllerTypes.Select(type => type.GetTypeInfo()));
+                new HashSet<TypeInfo>(
+                    (suppressedControllerTypes ?? new Type[0]).Select(type => type.GetTypeInfo()));
+
+            this.added =
+                (addedControllerTypes ?? new Type[0]).Select(type => type.GetTypeInfo()).ToArray();
         }
 
         public void PopulateFeature(IEnumerable<ApplicationPart> parts, ControllerFeature feature)
@@ -45,6 +58,14 @@ namespace Microsoft.SCIM
                 if (this.suppressed.Contains(controller))
                 {
                     feature.Controllers.Remove(controller);
+                }
+            }
+
+            foreach (TypeInfo controller in this.added)
+            {
+                if (!feature.Controllers.Contains(controller))
+                {
+                    feature.Controllers.Add(controller);
                 }
             }
         }

@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
+﻿// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
 
 namespace Microsoft.SCIM
 {
@@ -8,7 +8,7 @@ namespace Microsoft.SCIM
     using System.Web.Http.Dispatcher;
 
     /// <summary>
-    /// Removes named controllers from Web API's discovered set.
+    /// Adds and removes named controllers in Web API's discovered set.
     /// </summary>
     /// <remarks>
     /// The net48 counterpart to <c>ScimSuppressedControllerFeatureProvider</c>. Web API resolves
@@ -19,24 +19,44 @@ namespace Microsoft.SCIM
     public sealed class ScimSuppressedControllerTypeResolver : DefaultHttpControllerTypeResolver
     {
         private readonly HashSet<Type> suppressed;
+        private readonly Type[] added;
 
         public ScimSuppressedControllerTypeResolver(params Type[] suppressedControllerTypes)
+            : this(suppressedControllerTypes, null)
         {
-            if (null == suppressedControllerTypes)
-            {
-                throw new ArgumentNullException(nameof(suppressedControllerTypes));
-            }
+        }
 
-            this.suppressed = new HashSet<Type>(suppressedControllerTypes);
+        /// <param name="addedControllerTypes">
+        /// Controllers to discover that assembly scanning does not find. A closed generic such
+        /// as <c>ScimUsersApiController&lt;EduPassUser&gt;</c> is named
+        /// <c>ScimUsersApiController`1</c>, which fails Web API's "ends with Controller" rule,
+        /// so it has to be added here rather than found.
+        /// </param>
+        public ScimSuppressedControllerTypeResolver(
+            Type[] suppressedControllerTypes,
+            Type[] addedControllerTypes)
+        {
+            this.suppressed = new HashSet<Type>(suppressedControllerTypes ?? new Type[0]);
+            this.added = addedControllerTypes ?? new Type[0];
         }
 
         public override ICollection<Type> GetControllerTypes(IAssembliesResolver assembliesResolver)
         {
-            return
+            List<Type> result =
                 base
                     .GetControllerTypes(assembliesResolver)
                     .Where(type => !this.suppressed.Contains(type))
                     .ToList();
+
+            foreach (Type type in this.added)
+            {
+                if (!result.Contains(type))
+                {
+                    result.Add(type);
+                }
+            }
+
+            return result;
         }
     }
 }
