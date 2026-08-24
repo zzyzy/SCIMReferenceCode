@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
+﻿// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
 
 namespace Microsoft.SCIM
 {
@@ -19,7 +19,18 @@ namespace Microsoft.SCIM
     {
         public static ScimRequestHandler<Core2EnterpriseUser> CreateUserHandler(IProvider provider, ILogger logger)
         {
-            return new ScimRequestHandler<Core2EnterpriseUser>(
+            return ScimRequestHandlerFactory.CreateUserHandler<Core2EnterpriseUser>(provider, logger);
+        }
+
+        /// <summary>
+        /// Creates the <c>/Users</c> handler for a type derived from
+        /// <see cref="Core2EnterpriseUser"/>, so that a resource type carrying an additional
+        /// schema extension needs no adapter of its own.
+        /// </summary>
+        public static ScimRequestHandler<T> CreateUserHandler<T>(IProvider provider, ILogger logger)
+            where T : Core2EnterpriseUser
+        {
+            return new ScimRequestHandler<T>(
                 provider,
                 logger,
                 (IProvider adapted) =>
@@ -29,7 +40,7 @@ namespace Microsoft.SCIM
                         throw new ArgumentNullException(nameof(adapted));
                     }
 
-                    return new Core2EnterpriseUserProviderAdapter(adapted);
+                    return new Core2EnterpriseUserProviderAdapter<T>(adapted);
                 });
         }
 

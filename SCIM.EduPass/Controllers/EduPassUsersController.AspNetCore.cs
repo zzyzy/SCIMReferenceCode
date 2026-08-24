@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
+﻿// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
 
 #if !NET48
 
@@ -13,10 +13,11 @@ namespace Scim.EduPass
     /// The <c>/Users</c> endpoint, bound to <see cref="EduPassUser"/>.
     /// </summary>
     /// <remarks>
-    /// Replaces <c>Microsoft.SCIM.UsersController</c>, which binds the sealed
-    /// <c>Core2EnterpriseUser</c> and so cannot carry the Edupass extension. The host suppresses
-    /// the built-in one by passing <c>typeof(Microsoft.SCIM.UsersController)</c> to
-    /// <c>AddScim</c>; without that the two would contend for the same route.
+    /// Replaces <c>Microsoft.SCIM.UsersController</c>. A controller's generic parameter is its
+    /// model-binding type - <c>[FromBody] T resource</c> - so the built-in one binds a
+    /// <c>Core2EnterpriseUser</c> and drops the Edupass extension. The host suppresses it by
+    /// passing <c>typeof(Microsoft.SCIM.UsersController)</c> to <c>AddScim</c>; without that the
+    /// two would contend for the same route.
     ///
     /// Thin, like every other SCIM controller here: it names the resource type and delegates.
     /// The verb surface, the status codes and the error bodies all come from
@@ -28,7 +29,7 @@ namespace Scim.EduPass
     public sealed class EduPassUsersController : ScimResourceControllerBase<EduPassUser>
     {
         public EduPassUsersController(IProvider provider, ILogger<EduPassUsersController> logger)
-            : base(EduPassRequestHandlerFactory.CreateUserHandler(provider, logger))
+            : base(ScimRequestHandlerFactory.CreateUserHandler<EduPassUser>(provider, logger))
         {
         }
     }

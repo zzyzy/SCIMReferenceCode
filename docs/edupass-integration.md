@@ -116,8 +116,12 @@ ScimHttpConfiguration.Configure(
 ```
 
 `EduPassUsersController` then binds `EduPassUser`. It stays a three-line delegation to
-`ScimRequestHandler<EduPassUser>` — the controllers in this codebase name a resource type and
-delegate; behaviour lives in the handler and the provider.
+`ScimRequestHandlerFactory.CreateUserHandler<EduPassUser>(provider, logger)` — the controllers in
+this codebase name a resource type and delegate; behaviour lives in the handler and the provider.
+
+No provider adapter is needed. `CreateUserHandler<T>` is generic over `Core2EnterpriseUser`, so
+any derived resource type gets the enterprise adapter — same schema identifier, and `PATCH`
+answering 200 with the resource, which is what the specification requires of `/Users`.
 
 ---
 
