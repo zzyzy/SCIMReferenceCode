@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
+﻿// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
 
 namespace Microsoft.SCIM
 {
@@ -28,9 +28,14 @@ namespace Microsoft.SCIM
 
             foreach (ControllerModel controller in application.Controllers)
             {
-                // Only this assembly's controllers: a host's own controllers may legitimately
-                // serve routes that begin with the same segment.
-                if (controller.ControllerType.Assembly != typeof(ScimRouteConvention).Assembly)
+                // Every SCIM controller and nothing else. Tested by base type rather than by
+                // assembly: a consumer that derives from one of these to decorate it - a rate
+                // limiting filter, say - lives in its own assembly but inherits the same
+                // compile-time template, and must move with the configured prefix. An assembly
+                // check leaves such a controller stranded on the default segment while the rest
+                // of the service moves, with no error to say so. A host's unrelated controllers
+                // do not derive from this base and are still left alone.
+                if (!typeof(ScimControllerBase).IsAssignableFrom(controller.ControllerType))
                 {
                     continue;
                 }

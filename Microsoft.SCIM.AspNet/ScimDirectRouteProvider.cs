@@ -4,6 +4,8 @@ namespace Microsoft.SCIM
 {
     using System;
     using System.Collections.Generic;
+    using System.Linq;
+    using System.Web.Http;
     using System.Web.Http.Controllers;
     using System.Web.Http.Routing;
 
@@ -47,13 +49,48 @@ namespace Microsoft.SCIM
         {
             string prefix = base.GetRoutePrefix(controllerDescriptor);
 
+            // Every SCIM controller and nothing else. Tested by base type rather than by
+            // assembly, so that a consumer deriving from one of these to decorate it moves with
+            // the configured prefix too. See ScimRouteConvention on the other leg.
             if (null == controllerDescriptor
-                || controllerDescriptor.ControllerType?.Assembly != typeof(ScimDirectRouteProvider).Assembly)
+                || !typeof(ScimApiControllerBase).IsAssignableFrom(controllerDescriptor.ControllerType))
             {
                 return prefix;
             }
 
-            return ScimPath.ApplyPrefix(prefix);
+            if (null == prefix)
+            {
+                // base reads [RoutePrefix] with inherit: false as well, so a consumer's
+                // controller derived from one of ours declares no prefix of its own and would
+                // otherwise route at the service root - or, where a parameterised route such as
+                // the service root's overlaps, be shadowed by it and 404.
+                prefix = ScimDirectRouteProvider.FindRoutePrefix(controllerDescriptor.ControllerType);
+            }
+
+            return null == prefix ? null : ScimPath.ApplyPrefix(prefix);
+        }
+
+        /// <summary>
+        /// The nearest <c>[RoutePrefix]</c> on <paramref name="controllerType"/> or any of its
+        /// base types.
+        /// </summary>
+        private static string FindRoutePrefix(Type controllerType)
+        {
+            for (Type type = controllerType; null != type; type = type.BaseType)
+            {
+                IRoutePrefix attribute =
+                    type
+                        .GetCustomAttributes(typeof(RoutePrefixAttribute), inherit: false)
+                        .Cast<IRoutePrefix>()
+                        .FirstOrDefault();
+
+                if (null != attribute)
+                {
+                    return attribute.Prefix;
+                }
+            }
+
+            return null;
         }
     }
 }
