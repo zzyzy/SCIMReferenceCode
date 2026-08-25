@@ -127,7 +127,13 @@ namespace Scim.EduPass
 
                         if (null != await store.FindUserByUserNameAsync(user.UserName).ConfigureAwait(false))
                         {
-                            throw new HttpResponseException(HttpStatusCode.Conflict);
+                            // Typed, and with a detail. A bare conflict reaches Edupass as the
+                            // single word "Conflict", which does not say which attribute
+                            // collided - and userName and externalId are both unique here.
+                            throw new ScimTypedException(
+                                HttpStatusCode.Conflict,
+                                ScimTypes.Uniqueness,
+                                "Another user already holds this 'userName'.");
                         }
 
                         BaseEduPassScimProvider.Stamp(user, user.Metadata);
@@ -152,7 +158,11 @@ namespace Scim.EduPass
                         {
                             // The specification names displayName as the application role and
                             // requires a duplicate to be refused.
-                            throw new HttpResponseException(HttpStatusCode.Conflict);
+                            throw new ScimTypedException(
+                                HttpStatusCode.Conflict,
+                                ScimTypes.Uniqueness,
+                                "Another group already holds this 'displayName'. It encodes the "
+                                + "application role, which is unique.");
                         }
 
                         await BaseEduPassScimProvider.RequireResolvableMembersAsync(store, group).ConfigureAwait(false);
@@ -357,7 +367,10 @@ namespace Scim.EduPass
                                     user.Identifier,
                                     StringComparison.OrdinalIgnoreCase))
                         {
-                            throw new HttpResponseException(HttpStatusCode.Conflict);
+                            throw new ScimTypedException(
+                                HttpStatusCode.Conflict,
+                                ScimTypes.Uniqueness,
+                                "Another user already holds this 'userName'.");
                         }
 
                         user.Metadata.Created = replacedUser.Metadata.Created;
