@@ -31,6 +31,8 @@ namespace Microsoft.SCIM.WebHostSample
         private const string EnvironmentVariableName = "ASPNETCORE_ENVIRONMENT";
         private const string EnvironmentNameDevelopment = "Development";
         private const string ApiKeyConfigurationKey = "SCIM_API_KEY";
+        private const string ApiKeyHeaderName = "Authorization";
+        private const string ApiKeyHeaderScheme = "Bearer";
 
         public void Configuration(IAppBuilder app)
         {
@@ -170,8 +172,14 @@ namespace Microsoft.SCIM.WebHostSample
                     new HashedApiKeyStore(
                         new[] { new KeyValuePair<string, string>("sample", apiKey) });
 
-                app.Use<ApiKeyBearerMiddleware>(ApiKeyAuthenticationDefaults.HeaderName);
-                app.UseApiKeyAuthentication(store);
+                // Read from Authorization rather than the key's own header, because the
+                // Microsoft SCIM Validator has no credential field other than a bearer token.
+                // A relying party whose clients can send a header of their own should leave
+                // both arguments off and take the X-Api-Key default.
+                app.UseApiKeyAuthentication(
+                    store,
+                    Startup.ApiKeyHeaderName,
+                    Startup.ApiKeyHeaderScheme);
 
                 return;
             }

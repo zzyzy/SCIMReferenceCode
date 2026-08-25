@@ -114,6 +114,19 @@ const EDUPASS_UINFIN_PORTS: Record<Leg, number> = { net10: 5189, net48: 5190 };
  */
 const EDUPASS_STRICT_PORTS: Record<Leg, number> = { net10: 5191, net48: 5192 };
 
+/**
+ * A host authenticating by API key rather than by bearer token.
+ *
+ * The sample serves one mode at a time - SCIM_API_KEY selects the key - so the key path
+ * cannot be seen on any host that also accepts a token. It is configured to read the key
+ * from Authorization under the Bearer scheme, which is the arrangement a client with no
+ * credential field of its own needs, and the one the Microsoft SCIM Validator requires.
+ */
+const API_KEY_PORTS: Record<Leg, number> = { net10: 5193, net48: 5194 };
+
+/** The key the API key host accepts. Test-only, and not a secret. */
+export const API_KEY = "integration-suite-key";
+
 const configuredPrefix = process.env["SCIM_PATH_PREFIX"];
 const pathPrefix = (configuredPrefix ?? "scim").trim().replace(/^\/+|\/+$/gu, "");
 const routeBase = pathPrefix.length === 0 ? "" : `/${pathPrefix}`;
@@ -142,6 +155,8 @@ export const FAULTY_BASE_URL = `http://localhost:${FAULTY_PORTS[LEG]}${routeBase
 export const EDUPASS_UINFIN_BASE_URL = `http://localhost:${EDUPASS_UINFIN_PORTS[LEG]}${routeBase}`;
 
 export const EDUPASS_STRICT_BASE_URL = `http://localhost:${EDUPASS_STRICT_PORTS[LEG]}${routeBase}`;
+
+export const API_KEY_BASE_URL = `http://localhost:${API_KEY_PORTS[LEG]}${routeBase}`;
 
 /**
  * The development signing key committed to appsettings.Development.json.
@@ -258,6 +273,7 @@ function specs(): HostSpec[] {
       port: EDUPASS_STRICT_PORTS[LEG],
       environment: { SCIM_PROVIDER: "edupass", SCIM_ENFORCE_JWT: "1" },
     },
+    { port: API_KEY_PORTS[LEG], environment: { SCIM_API_KEY: API_KEY } },
   ];
 }
 

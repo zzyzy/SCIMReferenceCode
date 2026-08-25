@@ -79,9 +79,9 @@ and roles. A defect list is worth re-reading after every fix, not just at the st
 The validator is a hosted service, so it must reach the endpoint over the public internet.
 
 1. Build, then start the sample host with API-key authentication:
-   `SCIM_API_KEY=<key>` selects the API-key mode in `Startup.ConfigureAuthentication`.
-   `ApiKeyBearerMiddleware` copies a key presented as `Authorization: Bearer <key>` into the
-   API-key header, because the validator offers no credential field other than a bearer token.
+   `SCIM_API_KEY=<key>` selects the API-key mode, on either sample. Both wire the key handler
+   to read `Authorization` under the `Bearer` scheme, because the validator offers no
+   credential field other than a bearer token.
 2. Expose it: `ngrok http 5000 --host-header=localhost`.
    `--host-header=localhost` is **required**. The OWIN host binds `http://localhost:5000`, and
    `HttpListener` answers a request whose `Host` header names the ngrok domain with 400 before
@@ -135,7 +135,8 @@ curl -X PATCH .../Users/$ID -d '{"schemas":["urn:ietf:params:scim:api:messages:2
   correct and the first attempt at D4 was not; see §4.4.
 - `scim-compliance.spec.ts > answers 401 with a challenge, and a SCIM body if it sends one at
   all` fails on the net48 leg. It fails identically with these changes stashed, so it is
-  **pre-existing** and unrelated — it belongs to the in-progress API-key work in `Startup.cs`.
+  **pre-existing** and unrelated: Web API's `AuthorizeAttribute` answers 401 with its own
+  error document. Fixed separately by `ScimUnauthorizedResponseHandler`.
 
 ---
 

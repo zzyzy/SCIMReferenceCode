@@ -4,9 +4,11 @@
 
 namespace Microsoft.SCIM.WebHostSample
 {
+    using System.Collections.Generic;
     using System.Linq;
     using System.Text;
     using System.Threading.Tasks;
+    using Anacle.ApiFramework.Authentication.ApiKey;
     using Microsoft.AspNetCore.Authentication;
     using Microsoft.AspNetCore.Authentication.JwtBearer;
     using Microsoft.AspNetCore.Builder;
@@ -21,6 +23,10 @@ namespace Microsoft.SCIM.WebHostSample
 
     public class Program
     {
+        private const string ApiKeyConfigurationKey = "SCIM_API_KEY";
+        private const string ApiKeyHeaderName = "Authorization";
+        private const string ApiKeyHeaderScheme = "Bearer";
+
         public static void Main(string[] args)
         {
             WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
@@ -83,9 +89,33 @@ namespace Microsoft.SCIM.WebHostSample
                 }
             }
 
-            builder.Services
-                .AddAuthentication(ConfigureAuthenticationOptions)
-                .AddJwtBearer(ConfigureJwtBearerOptons);
+            // SCIM_API_KEY selects the API key mode instead of bearer tokens, exactly as the
+            // net48 sample does. One mode at a time on purpose, so that a key and a token are
+            // never both accepted on the same header - which would make an opaque key
+            // indistinguishable from a token to anything reading the wire.
+            string apiKey = configuration[Program.ApiKeyConfigurationKey];
+
+            if (!string.IsNullOrWhiteSpace(apiKey))
+            {
+                IApiKeyStore store =
+                    new HashedApiKeyStore(
+                        new[] { new KeyValuePair<string, string>("sample", apiKey) });
+
+                // Read from Authorization rather than the key's own header, because the
+                // Microsoft SCIM Validator has no credential field other than a bearer token.
+                // A relying party whose clients can send a header of their own should leave
+                // both arguments off and take the X-Api-Key default.
+                builder.Services.AddApiKeyAuthentication(
+                    store,
+                    headerName: Program.ApiKeyHeaderName,
+                    headerScheme: Program.ApiKeyHeaderScheme);
+            }
+            else
+            {
+                builder.Services
+                    .AddAuthentication(ConfigureAuthenticationOptions)
+                    .AddJwtBearer(ConfigureJwtBearerOptons);
+            }
 
             // Registers the provider, the monitor, the SCIM controllers (which live in
             // Microsoft.SCIM.AspNetCore, not in this assembly), the Newtonsoft settings and
