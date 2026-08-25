@@ -138,6 +138,10 @@ namespace Microsoft.SCIM
 
             configuration.MessageHandlers.Insert(0, new ScimHeadRequestHandler());
 
+            // Outermost, so that it sees the response an authorization filter short-circuited
+            // with. See ScimUnauthorizedResponseHandler.
+            configuration.MessageHandlers.Insert(0, new ScimUnauthorizedResponseHandler());
+
             // Before the formatter reads the body, so that the failure logging can read it
             // afterwards. See ScimRequestBufferingHandler and ScimLoggerExtensions.
             configuration.MessageHandlers.Add(new ScimRequestBufferingHandler());
