@@ -21,11 +21,19 @@ namespace Microsoft.SCIM
         {
             request = null;
 
-            Uri absoluteResourceIdentifier = new Uri(this.BulkRequest.BaseResourceIdentifier, this.Operation.Path);
-            if (!UniformResourceIdentifier.TryParse(
-                absoluteResourceIdentifier,
-                this.BulkRequest.Extensions,
-                out IUniformResourceIdentifier resourceIdentifier))
+            // path is required of every bulk operation, and omitting it used to reach
+            // Uri's constructor as a null relative identifier - a NullReferenceException
+            // that escaped as a 500 for what is the client's own malformed request.
+            Uri absoluteResourceIdentifier =
+                null == this.Operation.Path
+                    ? null
+                    : new Uri(this.BulkRequest.BaseResourceIdentifier, this.Operation.Path);
+
+            if (null == absoluteResourceIdentifier
+                || !UniformResourceIdentifier.TryParse(
+                    absoluteResourceIdentifier,
+                    this.BulkRequest.Extensions,
+                    out IUniformResourceIdentifier resourceIdentifier))
             {
                 this.Context.State = this;
 

@@ -158,7 +158,18 @@ namespace Microsoft.SCIM
                 return;
             }
 
-            this.path = new Uri(value, UriKind.Relative);
+            // RFC 7644 section 3.7 requires a relative path. TryCreate rather than the
+            // constructor because this runs during deserialization: an absolute path threw
+            // UriFormatException from inside Newtonsoft's OnDeserialized callback, which
+            // surfaced as a 500 rather than as the 400 a malformed request deserves. A null
+            // path is refused by the operation's own state, with the path named.
+            if (!Uri.TryCreate(value, UriKind.Relative, out Uri relativePath))
+            {
+                this.path = null;
+                return;
+            }
+
+            this.path = relativePath;
         }
 
         private void InitializePath() => this.InitializePath(this.pathValue);

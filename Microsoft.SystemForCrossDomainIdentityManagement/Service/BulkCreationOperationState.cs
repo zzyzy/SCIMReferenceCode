@@ -72,10 +72,20 @@ namespace Microsoft.SCIM
                         Uri patchResourceIdentifier =
                             new Uri(resourceIdentifier, UriKind.Relative);
 
+                        // The enterprise-qualified path, not the bare attribute name:
+                        // manager lives in the extension schema, and the patcher rejects
+                        // "manager" outright - which failed the whole bulk request for
+                        // any user carrying one.
+                        string managerPath =
+                            string.Concat(
+                                SchemaIdentifiers.Core2EnterpriseUser,
+                                SchemaConstants.SeparatorSchemaIdentifierAttribute,
+                                AttributeNames.Manager);
+
                         PatchOperation2Combined patchOperation =
                             PatchOperation2Combined.Create(
                                 OperationName.Add,
-                                AttributeNames.Manager,
+                                managerPath,
                                 user.EnterpriseExtension.Manager.Value);
                         PatchRequest2 patchRequest = new PatchRequest2();
                         patchRequest.AddOperation(patchOperation);
@@ -109,16 +119,17 @@ namespace Microsoft.SCIM
                                 continue;
                             }
 
-                            string memberValue = System.Text.Json.JsonSerializer.Serialize(member);
-                            if (!string.IsNullOrWhiteSpace(memberValue))
-                            {
-                                PatchOperation2Combined patchOperation =
-                                    PatchOperation2Combined.Create(
-                                        OperationName.Add,
-                                        AttributeNames.Members,
-                                        memberValue);
-                                patchRequest.AddOperation(patchOperation);
-                            }
+                            // The member's identifier, not the serialized Member. Create wraps
+                            // its argument in an OperationValue, and the members patcher reads
+                            // OperationValue.Value as the identifier - so serializing the whole
+                            // object stored a JSON blob as the membership and handed it back on
+                            // the next read.
+                            PatchOperation2Combined patchOperation =
+                                PatchOperation2Combined.Create(
+                                    OperationName.Add,
+                                    AttributeNames.Members,
+                                    member.Value);
+                            patchRequest.AddOperation(patchOperation);
                         }
 
                         this.AddSubordinate(patchResourceIdentifier, patchRequest, context);

@@ -261,13 +261,35 @@ namespace Microsoft.SCIM
                     Method = operation.Method
                 };
 
+            // RFC 7644 section 3.7.3: an operation that fails is reported in its own
+            // entry of the bulk response, and the request as a whole still succeeds.
+            // Letting a provider's exception escape here failed the entire request on
+            // the first duplicate userName - which also made failOnErrors unreachable,
+            // since the loop never got to count a failure.
+            try
+            {
+                await this.DispatchAsync(operation, response).ConfigureAwait(false);
+            }
+            catch (Exception exception)
+            {
+                response.Response = ProviderBase.DescribeFailure(exception, out HttpStatusCode statusCode);
+                response.Status = statusCode;
+            }
+
+            operation.Complete(response);
+        }
+
+        private async Task DispatchAsync(IBulkOperationContext operation, BulkResponseOperation response)
+        {
             if (HttpMethod.Delete == operation.Method)
             {
                 IBulkOperationContext<IResourceIdentifier> context = (IBulkOperationContext<IResourceIdentifier>)operation;
                 await this.DeleteAsync(context.Request).ConfigureAwait(false);
                 response.Status = HttpStatusCode.NoContent;
+                return;
             }
-            else if (HttpMethod.Get == operation.Method)
+
+            if (HttpMethod.Get == operation.Method)
             {
                 switch (operation)
                 {
@@ -280,38 +302,100 @@ namespace Microsoft.SCIM
                         break;
                 }
                 response.Status = HttpStatusCode.OK;
-            }
-            else if (ProtocolExtensions.PatchMethod == operation.Method)
-            {
-                IBulkOperationContext<IPatch> context = (IBulkOperationContext<IPatch>)operation;
-                await this.UpdateAsync(context.Request).ConfigureAwait(false);
-                response.Status = HttpStatusCode.OK;
-            }
-            else if (HttpMethod.Post == operation.Method)
-            {
-                IBulkOperationContext<Resource> context = (IBulkOperationContext<Resource>)operation;
-                Resource output = await this.CreateAsync(context.Request).ConfigureAwait(false);
-                response.Status = HttpStatusCode.Created;
-                response.Location = output.GetResourceIdentifier(context.BulkRequest.BaseResourceIdentifier);
-            }
-            else
-            {
-                string exceptionMessage =
-                    string.Format(
-                        CultureInfo.InvariantCulture,
-                        SystemForCrossDomainIdentityManagementServiceResources.ExceptionMethodNotSupportedTemplate,
-                        operation.Method);
-                ErrorResponse error =
-                    new ErrorResponse()
-                    {
-                        Status = HttpStatusCode.BadRequest,
-                        Detail = exceptionMessage
-                    };
-                response.Response = error;
-                response.Status = HttpStatusCode.BadRequest;
+                return;
             }
 
-            operation.Complete(response);
+            if (ProtocolExtensions.PatchMethod == operation.Method)
+            {
+                IBulkOperationContext<IPatch> patchContext = (IBulkOperationContext<IPatch>)operation;
+                await this.UpdateAsync(patchContext.Request).ConfigureAwait(false);
+                response.Status = HttpStatusCode.OK;
+                return;
+            }
+
+            if (HttpMethod.Post == operation.Method)
+            {
+                IBulkOperationContext<Resource> creationContext = (IBulkOperationContext<Resource>)operation;
+                Resource output = await this.CreateAsync(creationContext.Request).ConfigureAwait(false);
+                response.Status = HttpStatusCode.Created;
+                response.Location = output.GetResourceIdentifier(creationContext.BulkRequest.BaseResourceIdentifier);
+                return;
+            }
+
+            string exceptionMessage =
+                string.Format(
+                    CultureInfo.InvariantCulture,
+                    SystemForCrossDomainIdentityManagementServiceResources.ExceptionMethodNotSupportedTemplate,
+                    operation.Method);
+
+            response.Response =
+                new ErrorResponse()
+                {
+                    Status = HttpStatusCode.BadRequest,
+                    Detail = exceptionMessage
+                };
+            response.Status = HttpStatusCode.BadRequest;
+        }
+
+        /// <summary>
+        /// Turns a provider's exception into the error body for one bulk operation.
+        /// </summary>
+        /// <remarks>
+        /// The same mapping the single-resource handlers apply, so that an operation
+        /// answers the status it would have answered had it been sent on its own.
+        /// </remarks>
+        private static ErrorResponse DescribeFailure(Exception exception, out HttpStatusCode statusCode)
+        {
+            string detail = exception.Message;
+            ErrorType? errorType = null;
+
+            switch (exception)
+            {
+                case ScimTypedException typedException:
+                    statusCode = typedException.Response?.StatusCode ?? HttpStatusCode.BadRequest;
+                    detail = typedException.Detail ?? detail;
+                    if (Enum.TryParse(typedException.ScimType, out ErrorType parsed))
+                    {
+                        errorType = parsed;
+                    }
+                    break;
+
+                case System.Web.Http.HttpResponseException responseException:
+                    statusCode = responseException.Response?.StatusCode ?? HttpStatusCode.InternalServerError;
+                    break;
+
+                case ArgumentException _:
+                    statusCode = HttpStatusCode.BadRequest;
+                    break;
+
+                case NotImplementedException _:
+                case NotSupportedException _:
+                    statusCode = HttpStatusCode.NotImplemented;
+                    break;
+
+                default:
+                    statusCode = HttpStatusCode.InternalServerError;
+                    break;
+            }
+
+            if (!errorType.HasValue && HttpStatusCode.Conflict == statusCode)
+            {
+                errorType = ErrorType.uniqueness;
+            }
+
+            ErrorResponse error =
+                new ErrorResponse()
+                {
+                    Status = statusCode,
+                    Detail = detail
+                };
+
+            if (errorType.HasValue)
+            {
+                error.ErrorType = errorType.Value;
+            }
+
+            return error;
         }
 
         public virtual async Task<BulkResponse2> ProcessAsync(Queue<IBulkOperationContext> operations)
@@ -338,12 +422,12 @@ namespace Microsoft.SCIM
                         addOperation = true;
                         break;
                 }
-                if (addOperation)
+                if (addOperation && null != operation.Response)
                 {
                     result.AddOperation(operation.Response);
                 }
 
-                if (operation.Response.IsError())
+                if (null != operation.Response && operation.Response.IsError())
                 {
                     checked
                     {
@@ -351,10 +435,14 @@ namespace Microsoft.SCIM
                     }
                 }
 
+                // RFC 7644 section 3.7.3: failOnErrors is "the number of errors that the
+                // service provider will accept before the operation is terminated", so
+                // failOnErrors:1 stops at the first error. Comparing with > accepted one
+                // more than was asked for, which made the member unusable as a limit.
                 if
                 (
                         operation.BulkRequest.Payload.FailOnErrors.HasValue
-                    && countFailures > operation.BulkRequest.Payload.FailOnErrors.Value
+                    && countFailures >= operation.BulkRequest.Payload.FailOnErrors.Value
                 )
                 {
                     break;

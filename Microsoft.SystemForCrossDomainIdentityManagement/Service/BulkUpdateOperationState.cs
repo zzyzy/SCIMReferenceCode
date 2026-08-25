@@ -208,20 +208,25 @@ namespace Microsoft.SCIM
 
                     if
                     (
-                        !patchRequest.TryFindReference(
-                            dependency.Operation.Identifier,
-                            out IReadOnlyCollection<OperationValue> references)
+                        0 == patchRequest.ReplaceReferences(
+                                dependency.Operation.Identifier,
+                                dependentResourceIdentifier.Identifier.Identifier)
                     )
                     {
                         this.Fault(HttpStatusCode.InternalServerError);
                         return false;
                     }
-
-                    foreach (OperationValue value in references)
-                    {
-                        value.Value = dependentResourceIdentifier.Identifier.Identifier;
-                    }
                 }
+            }
+
+            // RFC 7644 section 3.7.2: a bulkId reference must name an operation in the same
+            // request. Anything still unresolved names one that was never declared, and
+            // storing it would leave the resource pointing at nothing.
+            IReadOnlyCollection<string> unresolved = patchRequest.FindBulkIdentifierReferences();
+            if (unresolved.Any())
+            {
+                this.Fault(HttpStatusCode.BadRequest, ErrorType.invalidValue);
+                return false;
             }
 
             request = requestBuffer;

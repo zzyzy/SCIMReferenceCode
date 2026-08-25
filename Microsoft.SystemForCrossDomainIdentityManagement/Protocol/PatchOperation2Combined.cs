@@ -44,9 +44,25 @@ namespace Microsoft.SCIM
             operationValue.Value = value;
 
             PatchOperation2Combined result = new PatchOperation2Combined(operationName, pathExpression);
-            result.Value = JsonConvert.SerializeObject(operationValue);
+            result.SetValues(new[] { operationValue });
 
             return result;
+        }
+
+        /// <summary>
+        /// Replaces the operation's values.
+        /// </summary>
+        /// <remarks>
+        /// Assigning the serialized form to <see cref="Value"/> instead would leave the
+        /// getter serializing a string, so <c>value</c> reached the wire as a JSON string
+        /// containing JSON. Readers then took the whole blob as the scalar value - which
+        /// is how a bulk-created group ended up with a serialized object as a member.
+        /// Holding the values as objects makes an operation built here indistinguishable
+        /// from one that arrived over the wire.
+        /// </remarks>
+        internal void SetValues(IReadOnlyCollection<OperationValue> operationValues)
+        {
+            this.values = operationValues?.ToArray();
         }
 
         public string Value

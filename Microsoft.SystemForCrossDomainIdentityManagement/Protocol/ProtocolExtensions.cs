@@ -1597,37 +1597,7 @@ namespace Microsoft.SCIM
 
             foreach (PatchOperation2Combined operation in patch.Operations)
             {
-                OperationValue[] values = null;
-                if (operation?.Value != null)
-                {
-                    values =
-                    JsonConvert.DeserializeObject<OperationValue[]>(
-                        operation.Value,
-                        ProtocolConstants.JsonSettings.Value);
-                }
-
-                if (values == null)
-                {
-                    string value = null;
-                    if (operation?.Value != null)
-                    {
-                        value = JsonConvert.DeserializeObject<string>(operation.Value, ProtocolConstants.JsonSettings.Value);
-                    }
-
-                    OperationValue valueSingle = new OperationValue()
-                    {
-                        Value = value
-                    };
-                    patchOperation2Values.Add(valueSingle);
-                }
-                else
-                {
-                    foreach (OperationValue value in values)
-                    {
-                        patchOperation2Values.Add(value);
-                    }
-                }
-
+                patchOperation2Values.AddRange(ProtocolExtensions.ReadOperationValues(operation));
             }
 
             IReadOnlyCollection<OperationValue> patchOperationValues = patchOperation2Values.AsReadOnly();
@@ -1648,6 +1618,139 @@ namespace Microsoft.SCIM
 
             references = referencesBuffer.ToArray();
             bool result = references.Any();
+            return result;
+        }
+
+        /// <summary>
+        /// Reads one combined operation's raw <c>value</c> into operation values.
+        /// </summary>
+        private static IReadOnlyCollection<OperationValue> ReadOperationValues(
+            PatchOperation2Combined operation)
+        {
+            if (null == operation?.Value)
+            {
+                return Array.Empty<OperationValue>();
+            }
+
+            OperationValue[] values =
+                JsonConvert.DeserializeObject<OperationValue[]>(
+                    operation.Value,
+                    ProtocolConstants.JsonSettings.Value);
+
+            if (null != values)
+            {
+                return values;
+            }
+
+            OperationValue single =
+                JsonConvert.DeserializeObject<OperationValue>(
+                    operation.Value,
+                    ProtocolConstants.JsonSettings.Value);
+
+            if (null != single && (null != single.Value || null != single.Reference))
+            {
+                return new[] { single };
+            }
+
+            string scalar =
+                JsonConvert.DeserializeObject<string>(
+                    operation.Value,
+                    ProtocolConstants.JsonSettings.Value);
+
+            return new[] { new OperationValue() { Value = scalar } };
+        }
+
+        /// <summary>
+        /// Rewrites every value that references <paramref name="referee"/> as a
+        /// <c>bulkId</c> to <paramref name="replacement"/>, and returns how many it changed.
+        /// </summary>
+        /// <remarks>
+        /// Bulk resolution used to read the values, mutate the objects it had read and stop
+        /// there - but reading deserializes, so the mutation landed on a copy and the
+        /// operation still carried <c>bulkId:...</c>. The reference reached the provider
+        /// unresolved and was stored as though it were an identifier. Writing the values
+        /// back is what actually resolves them.
+        /// </remarks>
+        internal static int ReplaceReferences(
+            this PatchRequest2Base<PatchOperation2Combined> patch,
+            string referee,
+            string replacement)
+        {
+            if (null == patch)
+            {
+                throw new ArgumentNullException(nameof(patch));
+            }
+
+            if (string.IsNullOrWhiteSpace(referee))
+            {
+                throw new ArgumentNullException(nameof(referee));
+            }
+
+            if (string.IsNullOrWhiteSpace(replacement))
+            {
+                throw new ArgumentNullException(nameof(replacement));
+            }
+
+            int count = 0;
+
+            foreach (PatchOperation2Combined operation in patch.Operations)
+            {
+                IReadOnlyCollection<OperationValue> values =
+                    ProtocolExtensions.ReadOperationValues(operation);
+
+                bool changed = false;
+                foreach (OperationValue value in values)
+                {
+                    if
+                    (
+                            value.TryParseBulkIdentifierReferenceValue(out string bulkIdentifier)
+                        && string.Equals(referee, bulkIdentifier, StringComparison.Ordinal)
+                    )
+                    {
+                        value.Value = replacement;
+                        changed = true;
+                        count++;
+                    }
+                }
+
+                if (changed)
+                {
+                    operation.SetValues(values);
+                }
+            }
+
+            return count;
+        }
+
+        /// <summary>
+        /// The <c>bulkId</c> references still present in a patch request.
+        /// </summary>
+        /// <remarks>
+        /// Read after resolution: anything left names a <c>bulkId</c> the request never
+        /// declared, and storing it would hand a client back a reference to a resource
+        /// that does not exist.
+        /// </remarks>
+        internal static IReadOnlyCollection<string> FindBulkIdentifierReferences(
+            this PatchRequest2Base<PatchOperation2Combined> patch)
+        {
+            if (null == patch)
+            {
+                throw new ArgumentNullException(nameof(patch));
+            }
+
+            List<string> result = new List<string>();
+
+            foreach (PatchOperation2Combined operation in patch.Operations)
+            {
+                foreach (OperationValue value in ProtocolExtensions.ReadOperationValues(operation))
+                {
+                    if (value.TryParseBulkIdentifierReferenceValue(out string bulkIdentifier))
+                    {
+                        result.Add(bulkIdentifier);
+                    }
+                }
+            }
+
             return result;
         }
 

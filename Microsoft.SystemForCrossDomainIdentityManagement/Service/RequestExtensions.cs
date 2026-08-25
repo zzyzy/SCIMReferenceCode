@@ -69,59 +69,117 @@ namespace Microsoft.SCIM
             return true;
         }
 
+        /// <summary>
+        /// Records, for every update, which creations in the same request it references by
+        /// <c>bulkId</c>.
+        /// </summary>
         private static void Relate(
-            this IBulkUpdateOperationContext context,
-            IEnumerable<IBulkCreationOperationContext> creations)
+            IReadOnlyCollection<IBulkCreationOperationContext> creations,
+            IReadOnlyCollection<IBulkUpdateOperationContext> updates)
         {
-            if (null == creations)
+            foreach (IBulkUpdateOperationContext update in updates)
             {
-                throw new ArgumentNullException(nameof(creations));
-            }
+                if (null == update.Method || null == update.Operation)
+                {
+                    throw new ArgumentException(
+                        SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidContext);
+                }
 
-            if (null == context.Method)
-            {
-                throw new ArgumentException(SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidContext);
-            }
-
-            if (null == context.Operation)
-            {
-                throw new ArgumentException(SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidContext);
-            }
-
-            try
-            {
-                dynamic operationDataJson = JsonConvert.DeserializeObject(context.Operation.Data.ToString());
-                IReadOnlyCollection<PatchOperation2Combined> patchOperations = operationDataJson.Operations.ToObject<List<PatchOperation2Combined>>();
-                PatchRequest2 patchRequest = new PatchRequest2(patchOperations);
+                PatchRequest2 patchRequest = RequestExtensions.ReadPatchRequest(update.Operation);
 
                 foreach (IBulkCreationOperationContext creation in creations)
                 {
-                    if (null == creation.Operation)
+                    if (null == creation.Operation
+                        || string.IsNullOrWhiteSpace(creation.Operation.Identifier))
                     {
-                        throw new InvalidOperationException(
+                        throw new ArgumentException(
                             SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidOperation);
                     }
 
-                    if (string.IsNullOrWhiteSpace(creation.Operation.Identifier))
+                    // A creation's own subordinate cannot depend on it: it already runs
+                    // after it, and recording the pair would have the creation waiting on
+                    // an operation that is waiting on the creation.
+                    if (creation == update.Parent)
                     {
-                        throw new InvalidOperationException(
-                            SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidOperation);
+                        continue;
                     }
 
                     if (patchRequest.References(creation.Operation.Identifier))
                     {
-                        creation.AddDependent(context);
-                        context.AddDependency(creation);
+                        creation.AddDependent(update);
+                        update.AddDependency(creation);
                     }
                 }
+            }
+        }
+
+        /// <summary>
+        /// Moves each creation ahead of the first operation that depends on it, so that the
+        /// identifier a reference resolves to exists by the time the reference is read.
+        /// </summary>
+        private static void Order(
+            List<IBulkOperationContext> operations,
+            IReadOnlyCollection<IBulkCreationOperationContext> creations)
+        {
+            foreach (IBulkCreationOperationContext creation in creations)
+            {
+                if (!creation.Dependents.Any())
+                {
+                    continue;
+                }
+
+                int firstDependent =
+                    operations
+                    .Select(
+                        (IBulkOperationContext item, int index) => (item, index))
+                    .Where(
+                        (candidate) =>
+                            creation
+                            .Dependents
+                            .Any(
+                                (IBulkOperationContext dependent) =>
+                                    dependent == candidate.item))
+                    .Select(
+                        (candidate) =>
+                            candidate.index)
+                    .DefaultIfEmpty(-1)
+                    .Min();
+
+                int current = operations.IndexOf(creation);
+
+                if (firstDependent < 0 || current < 0 || current < firstDependent)
+                {
+                    continue;
+                }
+
+                operations.RemoveAt(current);
+                operations.Insert(firstDependent, creation);
+            }
+        }
+
+        /// <summary>
+        /// Reads a bulk operation's <c>data</c> as a patch request.
+        /// </summary>
+        private static PatchRequest2 ReadPatchRequest(BulkRequestOperation operation)
+        {
+            if (operation.Data is PatchRequest2 patchRequest)
+            {
+                return patchRequest;
+            }
+
+            try
+            {
+                dynamic operationDataJson = JsonConvert.DeserializeObject(operation.Data.ToString());
+                IReadOnlyCollection<PatchOperation2Combined> patchOperations =
+                    operationDataJson.Operations.ToObject<List<PatchOperation2Combined>>();
+                return new PatchRequest2(patchOperations);
             }
             catch
             {
                 throw new HttpResponseException(HttpStatusCode.BadRequest);
             }
-                   
         }
-        
+
 
         private static void Enlist(
             this IRequest<BulkRequest2> request,
@@ -158,33 +216,12 @@ namespace Microsoft.SCIM
             if (HttpMethod.Post == operation.Method)
             {
                 IBulkCreationOperationContext context = new BulkCreationOperationContext(request, operation);
-                context.Relate(updates);
 
-                (IBulkOperationContext item, int index) firstDependent =
-                    operations
-                    .Select(
-                        (IBulkOperationContext item, int index) => (item, index))
-                    .Where(
-                        (candidateItem) =>
-                            context
-                            .Dependents
-                            .Any(
-                                (IBulkOperationContext dependentItem) =>
-                                    dependentItem == candidateItem.item))
-                    .OrderBy(
-                        (item) =>
-                            item.index)
-                    .FirstOrDefault();
-
-                if (firstDependent != default)
-                {
-                    operations.Insert(firstDependent.index, context);
-                }
-                else
-                {
-                    operations.Add(context);
-                }
+                operations.Add(context);
                 creations.Add(context);
+
+                // A creation's subordinates are the operations it had to synthesize - the
+                // manager reference, the group's memberships - and they run after it.
                 operations.AddRange(context.Subordinates);
                 updates.AddRange(context.Subordinates);
                 return;
@@ -200,7 +237,6 @@ namespace Microsoft.SCIM
             if (ProtocolExtensions.PatchMethod == operation.Method)
             {
                 IBulkUpdateOperationContext context = new BulkUpdateOperationContext(request, operation);
-                context.Relate(creations);
                 operations.Add(context);
                 updates.Add(context);
                 return;
@@ -230,53 +266,20 @@ namespace Microsoft.SCIM
                 request.Enlist(operation, operations, creations, updates);
             }
 
+            // Relating in one pass over the finished set, rather than as each operation is
+            // enlisted, is what makes the wiring independent of the order the client sent.
+            // RFC 7644 section 3.7.2 lets an operation reference a bulkId declared later,
+            // and a creation's own synthesized operations do not exist until it has been
+            // enlisted - so relating as we went missed a reference in either direction.
+            RequestExtensions.Relate(creations, updates);
+            RequestExtensions.Order(operations, creations);
+
             Queue<IBulkOperationContext> result = new Queue<IBulkOperationContext>(operations.Count);
             foreach (IBulkOperationContext operation in operations)
             {
                 result.Enqueue(operation);
             }
             return result;
-        }
-
-        private static void Relate(
-            this IBulkCreationOperationContext context,
-            IEnumerable<IBulkUpdateOperationContext> updates)
-        {
-            if (null == updates)
-            {
-                throw new ArgumentNullException(nameof(updates));
-            }
-
-            if (null == context.Method)
-            {
-                throw new ArgumentException(SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidContext);
-            }
-
-            if (null == context.Operation)
-            {
-                throw new ArgumentException(SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidContext);
-            }
-
-            if (string.IsNullOrWhiteSpace(context.Operation.Identifier))
-            {
-                throw new ArgumentException(SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidOperation);
-            }
-
-            foreach (IBulkUpdateOperationContext update in updates)
-            {
-                switch (update.Operation.Data)
-                {
-                    case PatchRequest2 patchRequest:
-                        if (patchRequest.References(context.Operation.Identifier))
-                        {
-                            context.AddDependent(update);
-                            update.AddDependency(context);
-                        }
-                        break;
-                    default:
-                        throw new HttpResponseException(HttpStatusCode.BadRequest);
-                }
-            }
         }
     }
 }
