@@ -28,6 +28,13 @@ namespace Microsoft.SCIM
             @">[^\s]*))";
 
         private const string ExpressionGroupNameBulkIdentifier = "identifier";
+
+        // Bounds the recursion that expands a path-less operation's value. A complex
+        // attribute nests one level and a schema extension's complex attribute two, so this
+        // leaves headroom while keeping a hostile body from recursing without end.
+        private const int MaximumExpansionDepth = 8;
+        private const string SchemaIdentifierPrefix = "urn:";
+        private const string SeparatorSubAttribute = ".";
         public const string MethodNameDelete = "DELETE";
         public const string MethodNamePatch = "PATCH";
         private static readonly Lazy<HttpMethod> MethodPatch =
@@ -108,6 +115,139 @@ namespace Microsoft.SCIM
                 });
         }
 
+        /// <summary>
+        /// Turns one operation as it arrived into the operations that are to be applied.
+        /// </summary>
+        /// <remarks>
+        /// RFC 7644 sections 3.5.2.1 and 3.5.2.3: an add or a replace that carries no path
+        /// targets the resource itself, and its value is then a set of attributes to apply.
+        /// Each member of that set is the operation the client would have sent had it named
+        /// the attribute in a path, so it is expanded into exactly that and applied by the
+        /// same code. Without this the appliers, which all begin by requiring a path, returned
+        /// on the first line - so a path-less operation answered success and changed nothing.
+        ///
+        /// A member whose own value is an object is expanded again, because a complex
+        /// attribute is patched a sub-attribute at a time. The separator differs by what the
+        /// parent names: a schema extension qualifies its attributes with a colon, a complex
+        /// attribute with a period.
+        /// </remarks>
+        internal static IEnumerable<PatchOperation2> Expand(PatchOperation2Combined operation)
+        {
+            if (null == operation)
+            {
+                return Enumerable.Empty<PatchOperation2>();
+            }
+
+            if (null != operation.Path && !string.IsNullOrWhiteSpace(operation.Path.AttributePath))
+            {
+                PatchOperation2 single =
+                    new PatchOperation2()
+                    {
+                        OperationName = operation.OperationName,
+                        Path = operation.Path
+                    };
+
+                // RFC 7644 section 3.5.2.2: a remove operation carries no value, and the
+                // operation is then left carrying none either - the patchers below read
+                // SingleOrDefault() as null and clear the attribute. Deserializing the absent
+                // value threw, which surfaced as 400 invalidPath; substituting a value object
+                // whose own value was null instead made the remove look like the removal of
+                // some other value, which they ignore. Either way nothing could be removed by
+                // path alone.
+                ProtocolExtensions.ReadValues(single, operation.Value);
+
+                return new[] { single };
+            }
+
+            // Only add and replace are defined without a path. A remove without one names
+            // nothing to remove, and is left alone here rather than guessed at.
+            if (OperationName.Add != operation.Name && OperationName.Replace != operation.Name)
+            {
+                return Enumerable.Empty<PatchOperation2>();
+            }
+
+            JObject attributes = ProtocolExtensions.ReadAttributes(operation.Value);
+
+            if (null == attributes)
+            {
+                return Enumerable.Empty<PatchOperation2>();
+            }
+
+            List<PatchOperation2> result = new List<PatchOperation2>();
+            ProtocolExtensions.Expand(attributes, null, operation.OperationName, ProtocolExtensions.MaximumExpansionDepth, result);
+            return result;
+        }
+
+        private static JObject ReadAttributes(string rawValue)
+        {
+            if (string.IsNullOrWhiteSpace(rawValue))
+            {
+                return null;
+            }
+
+            try
+            {
+                return JsonConvert.DeserializeObject(rawValue) as JObject;
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
+        }
+
+        private static void Expand(
+            JObject attributes,
+            string prefix,
+            string operationName,
+            int depth,
+            IList<PatchOperation2> result)
+        {
+            foreach (JProperty attribute in attributes.Properties())
+            {
+                if (string.IsNullOrWhiteSpace(attribute.Name))
+                {
+                    continue;
+                }
+
+                string path = ProtocolExtensions.Qualify(prefix, attribute.Name);
+
+                if (depth > 1 && attribute.Value is JObject complex && complex.HasValues)
+                {
+                    ProtocolExtensions.Expand(complex, path, operationName, depth - 1, result);
+                    continue;
+                }
+
+                PatchOperation2 expanded =
+                    new PatchOperation2()
+                    {
+                        OperationName = operationName,
+                        Path = Path.Create(path)
+                    };
+
+                ProtocolExtensions.ReadValues(expanded, attribute.Value.ToString(Formatting.None));
+
+                result.Add(expanded);
+            }
+        }
+
+        /// <summary>
+        /// Names a member of <paramref name="prefix"/> the way a path names it.
+        /// </summary>
+        private static string Qualify(string prefix, string name)
+        {
+            if (string.IsNullOrWhiteSpace(prefix))
+            {
+                return name;
+            }
+
+            // "urn:...:User" + "department" is one attribute path, not a sub-attribute of a
+            // complex one, so it takes the schema separator rather than the period.
+            return
+                prefix.StartsWith(ProtocolExtensions.SchemaIdentifierPrefix, StringComparison.OrdinalIgnoreCase)
+                    ? string.Concat(prefix, SchemaConstants.SeparatorSchemaIdentifierAttribute, name)
+                    : string.Concat(prefix, ProtocolExtensions.SeparatorSubAttribute, name);
+        }
+
         public static void Apply(this Core2Group group, PatchRequest2 patch)
         {
             if (null == group)
@@ -127,16 +267,163 @@ namespace Microsoft.SCIM
 
             foreach (PatchOperation2Combined operation in patch.Operations)
             {
-                PatchOperation2 operationInternal = new PatchOperation2()
+                foreach (PatchOperation2 operationInternal in ProtocolExtensions.Expand(operation))
                 {
-                    OperationName = operation.OperationName,
-                    Path = operation.Path
-                };
-
-                ProtocolExtensions.ReadValues(operationInternal, operation?.Value);
-
-                group.Apply(operationInternal);
+                    group.Apply(operationInternal);
+                }
             }
+        }
+
+        /// <summary>
+        /// Applies <c>members[&lt;selector&gt; eq &lt;comparison&gt;].&lt;subAttribute&gt;</c> to one
+        /// membership entry, adding the entry when no member satisfies the filter.
+        /// </summary>
+        /// <remarks>
+        /// RFC 7644 section 3.5.2.3: a replace whose target does not exist is treated as an
+        /// add, so a group that holds no member of the named type gains one rather than being
+        /// left alone.
+        /// </remarks>
+        private static IEnumerable<Member> PatchMember(IEnumerable<Member> members, PatchOperation2 operation)
+        {
+            IFilter subAttribute = operation.Path.SubAttributes?.SingleOrDefault();
+
+            if (null == subAttribute)
+            {
+                return members;
+            }
+
+            if (operation.Value != null && operation.Value.Count > 1)
+            {
+                return members;
+            }
+
+            string selector = subAttribute.AttributePath;
+            string patched = operation.Path.ValuePath.AttributePath;
+
+            bool Matches(Member item) =>
+                ProtocolExtensions.MemberMatches(item, selector, subAttribute.ComparisonValue);
+
+            Member existing = members?.SingleOrDefault((Member item) => Matches(item));
+
+            Member member = existing ?? ProtocolExtensions.CreateMember(selector, subAttribute.ComparisonValue);
+
+            if (null == member)
+            {
+                return members;
+            }
+
+            if (!ProtocolExtensions.TryReadMember(member, patched, out string current))
+            {
+                return members;
+            }
+
+            string resolved =
+                ProtocolExtensions.ResolveValue(
+                    operation,
+                    operation.Value?.FirstOrDefault()?.Value,
+                    current);
+
+            if (!ProtocolExtensions.TryWriteMember(member, patched, resolved))
+            {
+                return members;
+            }
+
+            // A membership with no value identifies nobody, so emptying it removes the entry.
+            if (string.IsNullOrWhiteSpace(member.Value))
+            {
+                return
+                    null == existing
+                        ? members
+                        : members.Where((Member item) => !Matches(item)).ToArray();
+            }
+
+            if (existing != null)
+            {
+                return members;
+            }
+
+            Member[] added = new Member[] { member };
+
+            return null == members ? added : members.Concat(added).ToArray();
+        }
+
+        private static bool MemberMatches(Member member, string selector, string comparison)
+        {
+            return
+                ProtocolExtensions.TryReadMember(member, selector, out string held)
+                && string.Equals(comparison, held, StringComparison.Ordinal);
+        }
+
+        private static Member CreateMember(string selector, string comparison)
+        {
+            Member member = new Member();
+
+            return ProtocolExtensions.TryWriteMember(member, selector, comparison) ? member : null;
+        }
+
+        private static bool TryReadMember(Member member, string subAttribute, out string value)
+        {
+            value = null;
+
+            if (null == member)
+            {
+                return false;
+            }
+
+            if (string.Equals(subAttribute, Microsoft.SCIM.AttributeNames.Value, StringComparison.OrdinalIgnoreCase))
+            {
+                value = member.Value;
+                return true;
+            }
+
+            if (string.Equals(subAttribute, Microsoft.SCIM.AttributeNames.Type, StringComparison.OrdinalIgnoreCase))
+            {
+                value = member.TypeName;
+                return true;
+            }
+
+            if (string.Equals(subAttribute, Microsoft.SCIM.AttributeNames.Display, StringComparison.OrdinalIgnoreCase))
+            {
+                value = member.Display;
+                return true;
+            }
+
+            if (string.Equals(subAttribute, Microsoft.SCIM.AttributeNames.Reference, StringComparison.OrdinalIgnoreCase))
+            {
+                value = member.Reference;
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool TryWriteMember(Member member, string subAttribute, string value)
+        {
+            if (string.Equals(subAttribute, Microsoft.SCIM.AttributeNames.Value, StringComparison.OrdinalIgnoreCase))
+            {
+                member.Value = value;
+                return true;
+            }
+
+            if (string.Equals(subAttribute, Microsoft.SCIM.AttributeNames.Type, StringComparison.OrdinalIgnoreCase))
+            {
+                member.TypeName = value;
+                return true;
+            }
+
+            if (string.Equals(subAttribute, Microsoft.SCIM.AttributeNames.Display, StringComparison.OrdinalIgnoreCase))
+            {
+                member.Display = value;
+                return true;
+            }
+
+            if (string.Equals(subAttribute, Microsoft.SCIM.AttributeNames.Reference, StringComparison.OrdinalIgnoreCase))
+            {
+                member.Reference = value;
+                return true;
+            }
+
+            return false;
         }
 
         private static void Apply(this Core2Group group, PatchOperation2 operation)
@@ -197,6 +484,17 @@ namespace Microsoft.SCIM
                     break;
 
                 case AttributeNames.Members:
+                    // A value path names a sub-attribute of one entry -
+                    // members[type eq "Group"].value - rather than the membership as a whole.
+                    // Falling through to the cases below took the operation for a full sync
+                    // and replaced every member with the single value it carried.
+                    if (null != operation.Path.ValuePath
+                        && !string.IsNullOrWhiteSpace(operation.Path.ValuePath.AttributePath))
+                    {
+                        group.Members = ProtocolExtensions.PatchMember(group.Members, operation);
+                        break;
+                    }
+
                     if (operation.Value != null)
                     {
                         switch (operation.Name)
@@ -1145,10 +1443,14 @@ namespace Microsoft.SCIM
                 return electronicMailAddresses;
             }
 
+            // Every canonical type RFC 7643 section 4.1.2 defines, as the phone number patcher
+            // does. Other was missing, so emails[type eq "other"].value - which Entra ID
+            // sends - answered 204 and changed nothing.
             string electronicMailAddressType = subAttribute.ComparisonValue;
             if
             (
                     !string.Equals(electronicMailAddressType, ElectronicMailAddress.Home, StringComparison.Ordinal)
+                && !string.Equals(electronicMailAddressType, ElectronicMailAddress.Other, StringComparison.Ordinal)
                 && !string.Equals(electronicMailAddressType, ElectronicMailAddress.Work, StringComparison.Ordinal)
             )
             {
@@ -1284,6 +1586,136 @@ namespace Microsoft.SCIM
             return current.ToArray();
         }
 
+        /// <summary>
+        /// Whether <paramref name="role"/> satisfies <c>roles[&lt;selector&gt; eq &lt;comparison&gt;]</c>.
+        /// </summary>
+        private static bool RoleMatches(Role role, string selector, string comparison)
+        {
+            if (null == role)
+            {
+                return false;
+            }
+
+            if (string.Equals(selector, Microsoft.SCIM.AttributeNames.Type, StringComparison.OrdinalIgnoreCase))
+            {
+                return string.Equals(comparison, role.ItemType, StringComparison.Ordinal);
+            }
+
+            if (string.Equals(selector, Microsoft.SCIM.AttributeNames.Primary, StringComparison.OrdinalIgnoreCase))
+            {
+                return bool.TryParse(comparison, out bool primary) && role.Primary == primary;
+            }
+
+            if (string.Equals(selector, Microsoft.SCIM.AttributeNames.Value, StringComparison.OrdinalIgnoreCase))
+            {
+                return string.Equals(comparison, role.Value, StringComparison.Ordinal);
+            }
+
+            if (string.Equals(selector, Microsoft.SCIM.AttributeNames.Display, StringComparison.OrdinalIgnoreCase))
+            {
+                return string.Equals(comparison, role.Display, StringComparison.Ordinal);
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// A role that <c>roles[&lt;selector&gt; eq &lt;comparison&gt;]</c> would select, or null
+        /// when the filter names a sub-attribute a role does not define.
+        /// </summary>
+        private static Role CreateRole(string selector, string comparison)
+        {
+            if (string.Equals(selector, Microsoft.SCIM.AttributeNames.Type, StringComparison.OrdinalIgnoreCase))
+            {
+                return new Role() { ItemType = comparison, Primary = true };
+            }
+
+            if (string.Equals(selector, Microsoft.SCIM.AttributeNames.Primary, StringComparison.OrdinalIgnoreCase))
+            {
+                return
+                    bool.TryParse(comparison, out bool primary)
+                        ? new Role() { Primary = primary }
+                        : null;
+            }
+
+            if (string.Equals(selector, Microsoft.SCIM.AttributeNames.Value, StringComparison.OrdinalIgnoreCase))
+            {
+                return new Role() { Value = comparison };
+            }
+
+            if (string.Equals(selector, Microsoft.SCIM.AttributeNames.Display, StringComparison.OrdinalIgnoreCase))
+            {
+                return new Role() { Display = comparison };
+            }
+
+            return null;
+        }
+
+        private static bool TryReadRole(Role role, string subAttribute, out string value)
+        {
+            value = null;
+
+            if (string.Equals(subAttribute, Microsoft.SCIM.AttributeNames.Value, StringComparison.OrdinalIgnoreCase))
+            {
+                value = role.Value;
+                return true;
+            }
+
+            if (string.Equals(subAttribute, Microsoft.SCIM.AttributeNames.Display, StringComparison.OrdinalIgnoreCase))
+            {
+                value = role.Display;
+                return true;
+            }
+
+            if (string.Equals(subAttribute, Microsoft.SCIM.AttributeNames.Type, StringComparison.OrdinalIgnoreCase))
+            {
+                value = role.ItemType;
+                return true;
+            }
+
+            if (string.Equals(subAttribute, Microsoft.SCIM.AttributeNames.Primary, StringComparison.OrdinalIgnoreCase))
+            {
+                value = role.Primary ? bool.TrueString : bool.FalseString;
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool TryWriteRole(Role role, string subAttribute, string value)
+        {
+            if (string.Equals(subAttribute, Microsoft.SCIM.AttributeNames.Value, StringComparison.OrdinalIgnoreCase))
+            {
+                role.Value = value;
+                return true;
+            }
+
+            if (string.Equals(subAttribute, Microsoft.SCIM.AttributeNames.Display, StringComparison.OrdinalIgnoreCase))
+            {
+                role.Display = value;
+                return true;
+            }
+
+            if (string.Equals(subAttribute, Microsoft.SCIM.AttributeNames.Type, StringComparison.OrdinalIgnoreCase))
+            {
+                role.ItemType = value;
+                return true;
+            }
+
+            if (string.Equals(subAttribute, Microsoft.SCIM.AttributeNames.Primary, StringComparison.OrdinalIgnoreCase))
+            {
+                if (!bool.TryParse(value, out bool primary))
+                {
+                    return false;
+                }
+
+                role.Primary = primary;
+                return true;
+            }
+
+            return false;
+        }
+
         internal static IEnumerable<Role> PatchRoles(IEnumerable<Role> roles, PatchOperation2 operation)
         {
             if (null == operation)
@@ -1338,40 +1770,56 @@ namespace Microsoft.SCIM
                 return roles;
             }
 
-            Role roleExisting =
-                roles?
-                .SingleOrDefault(
-                    (Role item) =>
-                        string.Equals(subAttribute.ComparisonValue, item.ItemType, StringComparison.Ordinal));
+            // The filter names which sub-attribute selects the entry and the value path names
+            // which one is written. Reading the first as type and the second as value was only
+            // right for roles[type eq "x"].value: roles[primary eq true].display then matched
+            // nothing, appended an entry typed "true", and wrote the display name over its
+            // value.
+            string selector = subAttribute.AttributePath;
+            string patched = operation.Path.ValuePath.AttributePath;
 
-            // ItemType carries the type the value path named. Leaving it unset meant a role
-            // added this way could never be found by the same path again, and reading the
-            // missing entry as though it existed dereferenced null.
-            Role role =
-                roleExisting
-                ?? new Role()
-                    {
-                        ItemType = subAttribute.ComparisonValue,
-                        Primary = true
-                    };
+            bool Matches(Role item) =>
+                ProtocolExtensions.RoleMatches(item, selector, subAttribute.ComparisonValue);
 
-            role.Value =
+            Role roleExisting = roles?.SingleOrDefault((Role item) => Matches(item));
+
+            // A new entry is seeded so that the filter that failed to find it now would find
+            // it. Leaving the selecting sub-attribute unset meant a role added this way could
+            // never be found by the same path again, and reading the missing entry as though
+            // it existed dereferenced null.
+            Role role = roleExisting ?? ProtocolExtensions.CreateRole(selector, subAttribute.ComparisonValue);
+
+            if (null == role)
+            {
+                return roles;
+            }
+
+            if (!ProtocolExtensions.TryReadRole(role, patched, out string current))
+            {
+                return roles;
+            }
+
+            string resolved =
                 ProtocolExtensions.ResolveValue(
                     operation,
                     operation.Value?.FirstOrDefault()?.Value,
-                    role.Value);
+                    current);
+
+            if (!ProtocolExtensions.TryWriteRole(role, patched, resolved))
+            {
+                return roles;
+            }
 
             IEnumerable<Role> result;
-            if (string.IsNullOrWhiteSpace(role.Value))
+
+            // Only an emptied value drops the entry: a role with no value carries nothing.
+            // An emptied display or type leaves an entry that still names a role.
+            if (string.Equals(patched, Microsoft.SCIM.AttributeNames.Value, StringComparison.OrdinalIgnoreCase)
+                && string.IsNullOrWhiteSpace(role.Value))
             {
                 if (roleExisting != null)
                 {
-                    result =
-                        roles
-                        .Where(
-                            (Role item) =>
-                                !string.Equals(subAttribute.ComparisonValue, item.ItemType, StringComparison.Ordinal))
-                        .ToArray();
+                    result = roles.Where((Role item) => !Matches(item)).ToArray();
                 }
                 else
                 {

@@ -54,22 +54,10 @@ namespace Microsoft.SCIM
 
             foreach (PatchOperation2Combined operation in patch.Operations)
             {
-                PatchOperation2 operationInternal = new PatchOperation2()
+                foreach (PatchOperation2 operationInternal in ProtocolExtensions.Expand(operation))
                 {
-                    OperationName = operation.OperationName,
-                    Path = operation.Path
-                };
-
-                // RFC 7644 section 3.5.2.2: a remove operation carries no value, and the
-                // operation is then left carrying none either - the patchers below read
-                // SingleOrDefault() as null and clear the attribute. Deserializing the absent
-                // value threw, which surfaced as 400 invalidPath; substituting a value object
-                // whose own value was null instead made the remove look like the removal of
-                // some other value, which they ignore. Either way nothing could be removed by
-                // path alone.
-                ProtocolExtensions.ReadValues(operationInternal, operation.Value);
-
-                user.Apply(operationInternal);
+                    user.Apply(operationInternal);
+                }
             }
         }
 
@@ -1112,11 +1100,19 @@ namespace Microsoft.SCIM
                 return;
             }
 
+            // Every canonical type RFC 7643 section 4.1.2 defines, not three of them. Home,
+            // other and pager were missing, so phoneNumbers[type eq "home"].value - which
+            // Entra ID sends - answered 204 and changed nothing. The guard itself stays:
+            // a value path naming a type the schema does not define selects no entry, and
+            // inventing one from the filter would put an unnamed type on the resource.
             string phoneNumberType = subAttribute.ComparisonValue;
             if
             (
                     !string.Equals(phoneNumberType, PhoneNumber.Fax, StringComparison.Ordinal)
+                && !string.Equals(phoneNumberType, PhoneNumber.Home, StringComparison.Ordinal)
                 && !string.Equals(phoneNumberType, PhoneNumber.Mobile, StringComparison.Ordinal)
+                && !string.Equals(phoneNumberType, PhoneNumber.Other, StringComparison.Ordinal)
+                && !string.Equals(phoneNumberType, PhoneNumber.Pager, StringComparison.Ordinal)
                 && !string.Equals(phoneNumberType, PhoneNumber.Work, StringComparison.Ordinal)
             )
             {
