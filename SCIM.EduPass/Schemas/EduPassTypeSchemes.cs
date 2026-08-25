@@ -277,13 +277,17 @@ namespace Scim.EduPass
                     Mutability = Mutability.immutable,
                     CaseExact = true,
                 });
-            members.AddSubAttribute(
+            AttributeScheme memberReference =
                 new AttributeScheme(AttributeNames.Reference, AttributeDataType.reference, plural: false)
                 {
                     Description = "The URI of the member.",
                     Mutability = Mutability.immutable,
                     CaseExact = true,
-                });
+                };
+
+            // RFC 7643 section 7 makes referenceTypes required on a reference attribute.
+            memberReference.AddReferenceTypes(Types.User);
+            members.AddSubAttribute(memberReference);
             members.AddSubAttribute(
                 new AttributeScheme(AttributeNames.Display, AttributeDataType.@string, plural: false)
                 {
@@ -324,13 +328,17 @@ namespace Scim.EduPass
                     CaseExact = true,
                 });
 
-            scheme.AddSubAttribute(
+            AttributeScheme groupReference =
                 new AttributeScheme(AttributeNames.Reference, AttributeDataType.reference, plural: false)
                 {
                     Description = "The URI of the group.",
                     Mutability = Mutability.readOnly,
                     CaseExact = true,
-                });
+                };
+
+            // RFC 7643 section 7 makes referenceTypes required on a reference attribute.
+            groupReference.AddReferenceTypes(Types.Group);
+            scheme.AddSubAttribute(groupReference);
 
             scheme.AddSubAttribute(
                 new AttributeScheme(AttributeNames.Display, AttributeDataType.@string, plural: false)

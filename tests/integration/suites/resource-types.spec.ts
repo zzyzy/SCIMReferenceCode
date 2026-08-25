@@ -17,6 +17,7 @@ interface ResourceTypeEntry {
   endpoint?: string;
   schema?: string;
   schemaExtensions?: { schema: string; required: boolean }[];
+  schemas?: string[];
 }
 
 async function resourceTypes(): Promise<ResourceTypeEntry[]> {
@@ -27,6 +28,15 @@ async function resourceTypes(): Promise<ResourceTypeEntry[]> {
 }
 
 describe("ResourceTypes: the base schema", () => {
+  it("declares itself with the core ResourceType schema URN", async () => {
+    // RFC 7643 section 6 names urn:ietf:params:scim:schemas:core:2.0:ResourceType. The
+    // constant was assembled from the enterprise extension prefix instead, so every
+    // resource type announced a schema URN that does not exist.
+    for (const entry of await resourceTypes()) {
+      expect(entry.schemas).toContain("urn:ietf:params:scim:schemas:core:2.0:ResourceType");
+    }
+  });
+
   it("names the core User schema as the User type's base", async () => {
     // RFC 7643 section 6: `schema` is "the resource type's primary/base schema URI".
     // The enterprise schema is an extension of User, not a replacement for it.

@@ -29,6 +29,9 @@ namespace Microsoft.SCIM
                 NullValueHandling = NullValueHandling.Ignore,
                 TypeNameHandling = TypeNameHandling.None,
 
+                // SCIM's $ref is an attribute, not Newtonsoft's reference metadata.
+                MetadataPropertyHandling = MetadataPropertyHandling.Ignore,
+
                 // Without this the clone loses any untyped schema extension, so an atomic PATCH
                 // would quietly strip it from the stored resource.
                 Converters = { new SchematizedJsonConverter() },

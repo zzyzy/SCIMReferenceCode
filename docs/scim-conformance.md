@@ -398,6 +398,23 @@ against the `netcoreapp3.1` build should expect exactly these differences and no
     the default `invalidValue`, so the same mistake looked like two different ones depending on
     the URL it arrived on. Covered by `filters.spec.ts`.
 
+30. **A `members` entry whose first JSON property is `$ref` is applied, not discarded.**
+    Newtonsoft reads a leading `$ref` as reference metadata rather than as the SCIM attribute,
+    and `ProtocolConstants.JsonSettings` swallows every deserialization error, so the operation
+    vanished while the service still answered **204**. Property order carries no meaning, and the
+    Edupass specification writes both its membership examples `$ref` first, so its role
+    assignments silently did nothing. `MetadataPropertyHandling.Ignore` is now set here and on
+    the two other serializers that round-trip resources. Covered by `groups.spec.ts`.
+
+31. **Resource types declare `urn:ietf:params:scim:schemas:core:2.0:ResourceType`.**
+    `SchemaIdentifiers.Core2ResourceType` was assembled from the enterprise extension prefix,
+    so every entry in `/ResourceTypes` announced a schema URN that does not exist. Covered by
+    `resource-types.spec.ts`.
+
+32. **`$ref` sub-attributes carry `referenceTypes`.** RFC 7643 §7 requires it on a reference
+    attribute; `groups.$ref` and `members.$ref` were advertised without it, so a client reading
+    `/Schemas` was not told what they point at. Covered by `edupass-conformance.spec.ts`.
+
 ---
 
 ## 6. Postman assertion inventory

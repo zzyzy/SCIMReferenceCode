@@ -38,6 +38,7 @@ interface AdvertisedAttribute {
   returned?: string;
   mutability?: string;
   subAttributes?: AdvertisedAttribute[];
+  referenceTypes?: string[];
 }
 
 interface AdvertisedSchema {
@@ -180,6 +181,24 @@ describe("Edupass conformance: Get All Schemas", () => {
     expect(names).toContain("value");
     expect(names).toContain("$ref");
     expect(names).toContain("display");
+  });
+
+  it("says what the groups $ref points at, as a reference attribute must", async () => {
+    // RFC 7643 section 7 makes referenceTypes required on a reference attribute, and
+    // the specification's own schema example carries "referenceTypes": ["Group"].
+    const groups = attribute(await advertisedSchema(SCHEMA_USER), "groups");
+    const reference = (groups.subAttributes ?? []).find((item) => item.name === "$ref");
+
+    expect(reference?.type).toBe("reference");
+    expect(reference?.referenceTypes).toEqual(["Group"]);
+  });
+
+  it("says what the members $ref points at", async () => {
+    const members = attribute(await advertisedSchema(SCHEMA_GROUP), "members");
+    const reference = (members.subAttributes ?? []).find((item) => item.name === "$ref");
+
+    expect(reference?.type).toBe("reference");
+    expect(reference?.referenceTypes).toEqual(["User"]);
   });
 
   it("declares members on the core Group schema", async () => {

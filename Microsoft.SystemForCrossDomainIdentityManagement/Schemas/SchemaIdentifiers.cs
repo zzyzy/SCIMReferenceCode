@@ -29,7 +29,7 @@ namespace Microsoft.SCIM
 
         public const string Core2ResourceType =
             SchemaIdentifiers.PrefixTypes2 +
-            SchemaIdentifiers.ExtensionEnterprise2 +
+            SchemaIdentifiers.VersionSchemasCore2 +
             Types.ResourceType;
 
         public const string Core2ServiceConfiguration =

@@ -43,6 +43,9 @@ namespace Microsoft.SCIM
                 new JsonSerializerSettings
                 {
                     NullValueHandling = NullValueHandling.Ignore,
+
+                    // SCIM's $ref is an attribute, not Newtonsoft's reference metadata.
+                    MetadataPropertyHandling = MetadataPropertyHandling.Ignore,
                     Converters = { new SchematizedJsonConverter() },
                 });
 

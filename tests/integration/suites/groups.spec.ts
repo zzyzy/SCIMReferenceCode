@@ -377,3 +377,54 @@ describe("Groups: the members attribute keeps what RFC 7643 4.2 defines", () => 
     expect((await readGroup(group.id)).members as unknown[]).toHaveLength(1);
   });
 });
+
+describe("Groups: a member entry that leads with $ref", () => {
+  // JSON property order carries no meaning, but Newtonsoft reads a leading $ref as
+  // reference metadata rather than as the SCIM attribute. The Edupass specification
+  // writes both its membership examples that way, so these are the exact bodies the
+  // service has to accept - and the failure they guard against was a silent one: 204,
+  // and the membership unchanged.
+  it("adds the member", async () => {
+    const group = await createGroup();
+    const user = await createUser();
+
+    expect(PATCH_APPLIED).toContain(
+      (
+        await scim(
+          "PATCH",
+          `/Groups/${group.id}`,
+          patchOp({
+            op: "add",
+            path: "members",
+            value: [{ $ref: `/Users/${user.id}`, value: user.id }],
+          }),
+        )
+      ).status,
+    );
+
+    expect(await memberIds(group.id)).toEqual([user.id]);
+  });
+
+  it("replaces the membership", async () => {
+    const group = await createGroup();
+    const [first, second] = [await createUser(), await createUser()];
+
+    for (const user of [first, second]) {
+      expect(PATCH_APPLIED).toContain(
+        (
+          await scim(
+            "PATCH",
+            `/Groups/${group.id}`,
+            patchOp({
+              op: "replace",
+              path: "members",
+              value: [{ $ref: `/Users/${user.id}`, value: user.id }],
+            }),
+          )
+        ).status,
+      );
+
+      expect(await memberIds(group.id)).toEqual([user.id]);
+    }
+  });
+});
