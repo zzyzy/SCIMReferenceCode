@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   SCHEMA_GROUP,
   SCHEMA_USER,
-  devToken,
+  authHeaders,
   edupass,
   patchOp,
   unique,
@@ -350,7 +350,7 @@ describe("Edupass conformance: the groups attribute", () => {
 
     // Fetched as given. Rebuilding it against the known-good base - which is what this
     // did before - repairs the very defect the test exists to catch.
-    const fetched = await fetch(reference, { headers: { Authorization: `Bearer ${devToken()}` } });
+    const fetched = await fetch(reference, { headers: authHeaders() });
     expect(fetched.status).toBe(200);
     expect(((await fetched.json()) as ScimResource).id).toBe(group.id);
   });
@@ -455,7 +455,7 @@ describe("Edupass conformance: the members attribute", () => {
     const read = await edupass<ScimResource>("GET", `/Groups/${group.id}`);
     const reference = (read.body["members"] as { $ref?: string }[])[0]?.$ref ?? "";
 
-    const fetched = await fetch(reference, { headers: { Authorization: `Bearer ${devToken()}` } });
+    const fetched = await fetch(reference, { headers: authHeaders() });
     expect(fetched.status).toBe(200);
     expect(((await fetched.json()) as ScimResource).id).toBe(user.id);
   });

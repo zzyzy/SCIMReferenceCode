@@ -165,6 +165,22 @@ export async function faulty<T = any>(
 }
 
 /** A value unique to this run, so suites can share a host without colliding. */
+/**
+ * The credential a raw fetch has to present, for the cases that follow a $ref by hand.
+ *
+ * Those cases cannot go through scim(): the point is to send the URI exactly as the
+ * service composed it, not to rebuild it against a known-good base. But hardcoding the
+ * dev bearer token there sends the sample host's credential to whatever party is under
+ * test, and an external relying party answers 401 - so the case fails on the
+ * credential and reports it as a broken reference, which is the opposite of what it
+ * exists to check.
+ */
+export function authHeaders(): Record<string, string> {
+  return EXTERNAL_AUTH
+    ? { [EXTERNAL_AUTH.header]: EXTERNAL_AUTH.value }
+    : { Authorization: `Bearer ${devToken()}` };
+}
+
 export function unique(prefix: string): string {
   return `${prefix}.${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36).slice(-4)}`;
 }

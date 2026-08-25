@@ -168,6 +168,10 @@ describe("Edupass: the extension round-trips", () => {
     const created = await edupass<ScimResource>("POST", "/Users", {
       schemas: [SCHEMA_USER],
       userName,
+      // Carried even though this case is about the extension: a party may legitimately
+      // require externalId, and omitting it here made this case fail on that instead -
+      // reporting a refusal of the extension-less user that had not happened.
+      externalId: unique("edupass-id"),
       active: true,
     });
 
@@ -279,7 +283,13 @@ describe("Edupass: the 256-character ceiling", () => {
 
   it("accepts a userName of exactly the maximum length", async () => {
     // The ceiling is inclusive; an off-by-one here would refuse a legal value.
-    const userName = `${"a".repeat(245)}@moe.edu.sg`;
+    //
+    // Padded to length rather than written as a literal. A constant userName is unique
+    // only on a party that forgets between runs: against one that stores users the
+    // first run creates it and every later run gets a genuine 409, which reads as a
+    // broken ceiling and is nothing of the kind.
+    const filler = unique("edu");
+    const userName = `${filler}${"a".repeat(245 - filler.length)}@moe.edu.sg`;
     expect(userName).toHaveLength(256);
 
     const response = await edupass("POST", "/Users", eduUser({ userName }));
