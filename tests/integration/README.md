@@ -25,6 +25,59 @@ dotnet build Microsoft.SCIM.sln
 `SCIM_HOST_LOG=1` forwards the host's stdout. `SCIM_BASE_URL=http://host/scim` tests
 an already-running endpoint instead of starting one.
 
+### Testing a relying party's own Edupass endpoint
+
+`SCIM_BASE_URL` overrides `BASE_URL`, which is the *core* host - and the core host binds
+`/Users` to `Core2User`, so the `edupass*` suites do not follow it. They address
+`EDUPASS_BASE_URL`, a separate sample process, because two providers cannot share one
+`/Users` route inside one host.
+
+So to point the Edupass suites at your own implementation, set
+`SCIM_EDUPASS_BASE_URL` instead:
+
+```bash
+SCIM_EDUPASS_BASE_URL=http://your-host/scim pnpm vitest run suites/edupass.spec.ts suites/edupass-conformance.spec.ts
+```
+
+It falls back to `SCIM_BASE_URL` when unset, since a real relying party serves the
+Edupass resource types at its one base address. Either variable suppresses host startup.
+
+A real relying party will not accept a token minted from the committed development key,
+so supply its own credential too:
+
+```bash
+SCIM_AUTH_HEADER=x-dsapi-key SCIM_AUTH_VALUE=<key>   SCIM_EDUPASS_BASE_URL=http://your-host/scim pnpm vitest run suites/edupass.spec.ts
+```
+
+It is applied only where a test has not set an `Authorization` header itself, so the
+negative authentication cases still present the bad credential they were written to
+present rather than being handed a valid one.
+
+`pnpm run test:fims` is that command for the FIMS relying party. It sets the address and
+the header name but **not** `SCIM_AUTH_VALUE`, which is a secret and has to come from the
+environment:
+
+```bash
+SCIM_AUTH_VALUE=<key> pnpm run test:fims
+```
+
+**These suites write.** They create and delete users and groups, and against a relying
+party backed by a real system that means real rows and, depending on the implementation,
+real notification e-mail to administrators. Point them at a disposable database.
+
+Two limits are worth knowing before reading a green run as full conformance:
+
+- `edupass-test-plan.spec.ts` is **not** included, because part of it addresses
+  `EDUPASS_STRICT_BASE_URL` - a host built with JWT validation enforced over a committed
+  symmetric key. No external endpoint can stand in for that, and the cases that use it
+  will fail against one.
+- `edupass-uinfin.spec.ts` needs a host constructed with `requireUinFin: true`. A relying
+  party that does not store UIN/FIN cannot satisfy it and should not try.
+
+The other four sample hosts - unimplemented, faulty, uinFin and strict-JWT - stay
+in-memory. They are the contract tests for the shared library, not for a relying party,
+and each needs a provider that only a purpose-built host can supply.
+
 ## Six hosts, not one
 
 Most of what these tests cover needs a particular provider behind the endpoints, and a

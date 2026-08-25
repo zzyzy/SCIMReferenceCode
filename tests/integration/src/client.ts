@@ -6,6 +6,7 @@ import {
   DEV_SIGNING_KEY,
   EDUPASS_BASE_URL,
   EDUPASS_UINFIN_BASE_URL,
+  EXTERNAL_AUTH,
   FAULTY_BASE_URL,
   UNIMPLEMENTED_BASE_URL,
 } from "./host.js";
@@ -79,7 +80,16 @@ export async function scim<T = any>(
   const headers = new Headers(options.headers ?? {});
 
   if (!options.anonymous && !headers.has("Authorization")) {
-    headers.set("Authorization", `Bearer ${devToken()}`);
+    if (EXTERNAL_AUTH) {
+      // An external relying party has its own credential; the dev bearer token means
+      // nothing to it. Only set when the test has not named this header itself, so a
+      // case that presents a deliberately bad credential still presents it.
+      if (!headers.has(EXTERNAL_AUTH.header)) {
+        headers.set(EXTERNAL_AUTH.header, EXTERNAL_AUTH.value);
+      }
+    } else {
+      headers.set("Authorization", `Bearer ${devToken()}`);
+    }
   }
 
   const hasBody = options.raw !== undefined || body !== undefined;

@@ -21,6 +21,48 @@ export const COVERAGE = process.env["SCIM_COVERAGE"] === "1";
 /** An external host to test instead of starting one, e.g. SCIM_BASE_URL=http://host/scim. */
 const EXTERNAL_BASE_URL = process.env["SCIM_BASE_URL"];
 
+/**
+ * An external Edupass host, for the `edupass*` suites specifically.
+ *
+ * Needed because SCIM_BASE_URL alone cannot aim those suites anywhere. The `edupass`
+ * client helper defaults to EDUPASS_BASE_URL, which is a separate sample process on its
+ * own port, so overriding BASE_URL redirects only the core suites - and those bind
+ * /Users to Core2User and are not Edupass-shaped. A relying party wanting to run the
+ * Edupass conformance suite against its own implementation had no way to do it.
+ *
+ * Falls back to SCIM_BASE_URL, because a relying party that serves the Edupass resource
+ * types serves them at its one base address. The two-process split is an artefact of the
+ * sample host, where two providers cannot share one /Users route.
+ */
+const EXTERNAL_EDUPASS_BASE_URL =
+  process.env["SCIM_EDUPASS_BASE_URL"] ?? EXTERNAL_BASE_URL;
+
+/**
+ * Whether any external host is configured, and therefore no sample host should be
+ * started or torn down.
+ */
+const EXTERNAL = EXTERNAL_BASE_URL ?? EXTERNAL_EDUPASS_BASE_URL;
+
+/**
+ * A credential to present to an external host, instead of the sample's dev bearer token.
+ *
+ * A real relying party does not accept a token minted from the committed development
+ * key, so without this the suites can only ever observe its 401. Set both variables:
+ *
+ *   SCIM_AUTH_HEADER=x-dsapi-key SCIM_AUTH_VALUE=<key>
+ *
+ * Applied only where a test has not set an Authorization header of its own, so the
+ * negative authentication cases still assert what they were written to assert rather
+ * than being handed a valid credential.
+ */
+export const EXTERNAL_AUTH: { readonly header: string; readonly value: string } | undefined =
+  process.env["SCIM_AUTH_HEADER"] && process.env["SCIM_AUTH_VALUE"]
+    ? {
+        header: process.env["SCIM_AUTH_HEADER"] as string,
+        value: process.env["SCIM_AUTH_VALUE"] as string,
+      }
+    : undefined;
+
 const PORTS: Record<Leg, number> = { net10: 5180, net48: 5181 };
 
 /**
@@ -78,7 +120,8 @@ const routeBase = pathPrefix.length === 0 ? "" : `/${pathPrefix}`;
 
 export const BASE_URL = EXTERNAL_BASE_URL ?? `http://localhost:${PORTS[LEG]}${routeBase}`;
 
-export const EDUPASS_BASE_URL = `http://localhost:${EDUPASS_PORTS[LEG]}${routeBase}`;
+export const EDUPASS_BASE_URL =
+  EXTERNAL_EDUPASS_BASE_URL ?? `http://localhost:${EDUPASS_PORTS[LEG]}${routeBase}`;
 
 export const UNIMPLEMENTED_BASE_URL = `http://localhost:${UNIMPLEMENTED_PORTS[LEG]}${routeBase}`;
 
@@ -230,8 +273,10 @@ function spawnChild(command: string, args: string[], paths: HostPaths, environme
 }
 
 export async function startHost(): Promise<void> {
-  if (EXTERNAL_BASE_URL) {
-    await waitUntilReachable(`${EXTERNAL_BASE_URL}/ServiceProviderConfig`);
+  if (EXTERNAL) {
+    // Probed rather than assumed reachable, so a misconfigured address fails with "did
+    // not come up" here instead of as every assertion in the run.
+    await waitUntilReachable(`${EXTERNAL}/ServiceProviderConfig`);
     return;
   }
 
@@ -375,7 +420,7 @@ export async function stopHost(): Promise<void> {
     child.stderr?.destroy();
   }
 
-  if (!EXTERNAL_BASE_URL) {
+  if (!EXTERNAL) {
     for (const host of specs()) {
       await killByPort(host.port);
     }

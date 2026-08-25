@@ -9,6 +9,7 @@
     "test:watch": "vitest",
     "test:coverage": "cross-env SCIM_COVERAGE=1 vitest run",
     "test:net48": "cross-env SCIM_LEG=net48 vitest run",
+    "test:fims": "cross-env SCIM_EDUPASS_BASE_URL=http://localhost/fims/scim SCIM_AUTH_HEADER=x-dsapi-key vitest run suites/edupass.spec.ts suites/edupass-conformance.spec.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
