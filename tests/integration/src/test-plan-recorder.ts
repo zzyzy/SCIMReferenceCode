@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { LEG, REPO_ROOT } from "./host.js";
+import { EDUPASS_BASE_URL, LEG, REPO_ROOT } from "./host.js";
 import { edupass, type ScimRequestOptions, type ScimResponse } from "./client.js";
 
 /**
@@ -22,6 +22,15 @@ interface Exchange {
   readonly method: string;
   readonly path: string;
   readonly requestBody?: string;
+  /**
+   * How the request was authorized, when the case chose that itself.
+   *
+   * Left out for the ordinary minted token, which is the same in every other case and
+   * so says nothing. Recorded for the authentication cases, where the token is the
+   * input under test and `GET /Users` alone would make five different requests look
+   * like one.
+   */
+  readonly authorization?: string;
   readonly status: number;
   readonly responseBody: string;
 }
@@ -67,11 +76,23 @@ export function note(remark: string): void {
   current?.remarks.push(remark);
 }
 
+/** What the Input column should say about the token, or nothing if it was the usual one. */
+function describeAuthorization(options: ScimRequestOptions): string | undefined {
+  if (options.anonymous) {
+    return "(no Authorization header)";
+  }
+
+  return options.headers?.["Authorization"];
+}
+
 /**
  * Sends to the Edupass host and records the exchange.
  *
  * Every request a case makes goes through here, so the Input column is the case's actual
  * traffic rather than a description of it.
+ *
+ * A case that addresses a different Edupass host - the strict-JWT one - is recorded with
+ * the full URL, so that a row cannot be read as traffic to the ordinary host.
  */
 export async function call<T = any>(
   method: string,
@@ -80,10 +101,12 @@ export async function call<T = any>(
   options: ScimRequestOptions = {},
 ): Promise<ScimResponse<T>> {
   const response = await edupass<T>(method, path, body, options);
+  const base = options.base ?? EDUPASS_BASE_URL;
 
   current?.exchanges.push({
     method,
-    path,
+    path: base === EDUPASS_BASE_URL ? path : `${base}${path}`,
+    authorization: describeAuthorization(options),
     requestBody:
       options.raw !== undefined
         ? options.raw
@@ -115,10 +138,17 @@ export function endCase(status: "Pass" | "Fail", failure?: string): void {
 function composeInput(item: Case): string {
   return item.exchanges
     .map((exchange) => {
-      const line = `${exchange.method} ${exchange.path}`;
-      return exchange.requestBody === undefined
-        ? line
-        : `${line}\n    ${truncate(exchange.requestBody)}`;
+      const lines = [`${exchange.method} ${exchange.path}`];
+
+      if (exchange.authorization !== undefined) {
+        lines.push(`    Authorization: ${truncate(exchange.authorization)}`);
+      }
+
+      if (exchange.requestBody !== undefined) {
+        lines.push(`    ${truncate(exchange.requestBody)}`);
+      }
+
+      return lines.join("\n");
     })
     .join("\n");
 }

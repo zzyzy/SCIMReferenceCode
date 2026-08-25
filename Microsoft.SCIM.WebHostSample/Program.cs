@@ -47,13 +47,20 @@ namespace Microsoft.SCIM.WebHostSample
 #if DEBUG
                 if (environment.IsDevelopment())
                 {
+                    // SCIM_ENFORCE_JWT=1 turns the four checks back on while keeping the
+                    // committed symmetric key, so that a test can watch an expired token,
+                    // a wrong issuer or a wrong audience be rejected. The Release branch
+                    // below resolves its keys over OIDC metadata and therefore cannot be
+                    // reached without a live authority.
+                    bool enforce = Program.Enabled(configuration["SCIM_ENFORCE_JWT"]);
+
                     options.TokenValidationParameters =
                        new TokenValidationParameters
                        {
-                           ValidateIssuer = false,
-                           ValidateAudience = false,
-                           ValidateLifetime = false,
-                           ValidateIssuerSigningKey = false,
+                           ValidateIssuer = enforce,
+                           ValidateAudience = enforce,
+                           ValidateLifetime = enforce,
+                           ValidateIssuerSigningKey = enforce,
                            ValidIssuer = configuration["Token:TokenIssuer"],
                            ValidAudience = configuration["Token:TokenAudience"],
                            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(configuration["Token:IssuerSigningKey"]))

@@ -126,13 +126,21 @@ namespace Microsoft.SCIM.WebHostSample.IIS
 #if DEBUG
             if (isDevelopment)
             {
+                // SCIM_ENFORCE_JWT=1 turns the four checks back on while keeping the
+                // committed symmetric key, so that a test can watch an expired token, a
+                // wrong issuer or a wrong audience be rejected. Kept identical to the
+                // net10.0 sample and to Microsoft.SCIM.WebHostSample.Net48.
+                bool enforce =
+                    string.Equals(configuration["SCIM_ENFORCE_JWT"], "1", StringComparison.Ordinal)
+                    || string.Equals(configuration["SCIM_ENFORCE_JWT"], "true", StringComparison.OrdinalIgnoreCase);
+
                 validationParameters =
                     new TokenValidationParameters
                     {
-                        ValidateIssuer = false,
-                        ValidateAudience = false,
-                        ValidateLifetime = false,
-                        ValidateIssuerSigningKey = false,
+                        ValidateIssuer = enforce,
+                        ValidateAudience = enforce,
+                        ValidateLifetime = enforce,
+                        ValidateIssuerSigningKey = enforce,
                         ValidIssuer = issuer,
                         ValidAudience = audience,
                         IssuerSigningKey = securityKey

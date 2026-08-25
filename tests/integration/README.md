@@ -25,7 +25,7 @@ dotnet build Microsoft.SCIM.sln
 `SCIM_HOST_LOG=1` forwards the host's stdout. `SCIM_BASE_URL=http://host/scim` tests
 an already-running endpoint instead of starting one.
 
-## Five hosts, not one
+## Six hosts, not one
 
 Most of what these tests cover needs a particular provider behind the endpoints, and a
 provider is chosen at startup - so the run starts one host per behaviour, all from the
@@ -38,13 +38,30 @@ same sample, selected with `SCIM_PROVIDER`:
 | 5185 / 5186 | `unimplemented` | `UnimplementedProvider` | that an unimplemented operation is 501, not 500 |
 | 5187 / 5188 | `faulty` | `FaultyProvider` | that a provider fault becomes a SCIM error body, not a stack trace |
 | 5189 / 5190 | `edupass` + `SCIM_EDUPASS_REQUIRE_UINFIN=1` | `InMemoryEduPassProvider(true)` | UIN/FIN required, and advertised as required |
+| 5191 / 5192 | `edupass` + `SCIM_ENFORCE_JWT=1` | `InMemoryEduPassProvider` | that an expired token, a wrong issuer or a wrong audience is refused |
 
 Edupass needs its own process rather than its own route: it binds `/Users` to
 `EduPassUser`, and two providers cannot serve one route. The others need their own
 because a provider is a singleton chosen at startup.
 
 `src/client.ts` has one send helper per host - `scim`, `edupass`, `unimplemented`,
-`faulty`, `edupassUinFin` - so a test names the host it means.
+`faulty`, `edupassUinFin` - so a test names the host it means. The strict-JWT host is the
+one exception: it is the same provider as 5183, so a case reaches it by passing
+`base: EDUPASS_STRICT_BASE_URL` rather than through a helper of its own.
+
+### Why the strict-JWT host exists
+
+The sample disables issuer, audience, lifetime and signing-key validation when
+`ASPNETCORE_ENVIRONMENT=Development`, and Development is the only environment these tests
+can start a host in - the Release branch resolves its signing keys over OIDC metadata, so
+it needs a live authority. On the ordinary hosts an expired token, a token from another
+issuer and a token for another audience are therefore all accepted, and a test asserting
+401 would be asserting the bypass rather than the check.
+
+`SCIM_ENFORCE_JWT=1` turns those four checks back on over the same committed symmetric key,
+which is what makes the rejection observable. It only ever makes validation stricter, so it
+is safe to leave in the sample: the `#if DEBUG` guard that keeps the bypass out of a Release
+build is untouched.
 
 ## Coverage
 
@@ -115,7 +132,7 @@ collected alongside.
 | `suites/robustness.spec.ts` | hostile input, concurrency, a soak |
 | `suites/edupass.spec.ts` | the Edupass specification at a party that does not store UIN/FIN |
 | `suites/edupass-uinfin.spec.ts` | the same at a party that does |
-| `suites/edupass-test-plan.spec.ts` | the 25 numbered cases of `test-plan.xlsx`, and the CSV they produce |
+| `suites/edupass-test-plan.spec.ts` | the 25 numbered cases of `test-plan.xlsx` and the `RP-` cases of `M2-SCIM RP Testcases`, and the CSV they produce |
 | `suites/edupass-conformance.spec.ts` | the Edupass specification read as a contract - discovery payloads, `groups`, `$ref` |
 | `suites/resource-types.spec.ts` | RFC 7643 6 - base schema and `schemaExtensions` |
 | `suites/unimplemented.spec.ts` | what a provider that implements nothing answers |
@@ -123,9 +140,18 @@ collected alongside.
 
 ## The Edupass test plan
 
-`suites/edupass-test-plan.spec.ts` runs the 25 cases of `test-plan.xlsx` against the Edupass
-host and writes them back out as `edupass-test-plan-results.<leg>.csv` at the repository root
-— one per leg, since the leg is what the run was against:
+`suites/edupass-test-plan.spec.ts` runs two plans against the Edupass host and writes them
+back out as `edupass-test-plan-results.<leg>.csv` at the repository root — one per leg, since
+the leg is what the run was against:
+
+- the 25 cases of `test-plan.xlsx`, numbered 1 to 25 as the sheet numbers them;
+- the cases of `M2-SCIM RP Testcases`, the suite Edupass itself runs against a relying party,
+  prefixed `RP-` and otherwise keeping the document's own labels — `RP-JWT-1` to `RP-JWT-5`
+  for its JWT Authentication tests, `RP-1a`, `RP-1`, `RP-2a` and so on for its SCIM Operation
+  tests, and `RP-0` for the setup and pre-clean step it describes. The prefix is only there to
+  keep the two numbering schemes apart in one CSV.
+
+The CSV columns are the plan's own:
 
 | S/N | Datetime | Input | Output | Status | Remarks |
 |---|---|---|---|---|---|
@@ -135,7 +161,7 @@ it — so a row here reads next to a row in the plan's execution sheet without t
 are the run's actual traffic: every request a case makes goes through `src/test-plan-recorder.ts`,
 which records it and returns the response to the case.
 
-**The plan is written for FIMS, and much of it is not SCIM.** A UPA created and routed to a
+**The xlsx plan is written for FIMS, and much of it is not SCIM.** A UPA created and routed to a
 user admin, positions added or overwritten on approval, a user banned or unbanned, a
 notification triggered — none of that is visible at this endpoint, because the relying party
 does it after the call returns. Each case therefore asserts the protocol half and records the
@@ -151,6 +177,24 @@ Two mappings the cases make explicit, because the plan leaves them implicit:
   the Group and derived onto the User. Those cases assert the `400 invalidPath` and record what
   Edupass should send instead. They also check the refusal changed nothing — a rejected patch
   that had dropped the old location would be the worst outcome.
+
+The `RP-` cases need none of that qualifying: `M2-SCIM RP Testcases` is written against a SCIM
+endpoint throughout, so every one of its expectations is checkable here. Three points about how
+they run:
+
+- **Its fixed identifiers are used as written** — `999900000001`, `X_<APPCODE>_TEST1` — because
+  the document chooses them deliberately, so a resource is recognisable in the RP's logs. `RP-0`
+  performs the pre-clean the document describes, and `RP-6` and `RP-7` delete everything, so a
+  completed run leaves nothing behind and an interrupted one cannot block the next. `<APPCODE>`
+  has no counterpart on the reference host, so the cases use a fixed stand-in.
+- **`uinFin` is omitted from every body**, by the document's own rule that a field the RP does
+  not declare at `GET /Schemas` is left out. `RP-0` asserts that this host still does not
+  declare it, so the omission cannot go stale.
+- **The JWT cases go to the strict-JWT host**, for the reason given under *Why the strict-JWT
+  host exists* above. `RP-0` also sends a valid token there, so that the five 401s that follow
+  are rejections of the token rather than of the host. The CSV records the full URL and the
+  Authorization header for these rows — without the header, five different requests would all
+  read as `GET /Users`.
 
 ## The Edupass conformance suite
 

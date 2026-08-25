@@ -60,6 +60,18 @@ const FAULTY_PORTS: Record<Leg, number> = { net10: 5187, net48: 5188 };
  */
 const EDUPASS_UINFIN_PORTS: Record<Leg, number> = { net10: 5189, net48: 5190 };
 
+/**
+ * The Edupass host with JWT validation enforced.
+ *
+ * The sample turns issuer, audience, lifetime and signing-key validation off in
+ * Development, and Development is what the harness has to run to start a host at
+ * all - the Release branch resolves its keys over OIDC metadata. So a rejection of
+ * an expired token, a wrong issuer or a wrong audience cannot be seen on the
+ * ordinary Edupass host, only here: SCIM_ENFORCE_JWT=1 turns those four checks back
+ * on over the same committed symmetric key.
+ */
+const EDUPASS_STRICT_PORTS: Record<Leg, number> = { net10: 5191, net48: 5192 };
+
 export const BASE_URL = EXTERNAL_BASE_URL ?? `http://localhost:${PORTS[LEG]}/scim`;
 
 export const EDUPASS_BASE_URL = `http://localhost:${EDUPASS_PORTS[LEG]}/scim`;
@@ -69,6 +81,8 @@ export const UNIMPLEMENTED_BASE_URL = `http://localhost:${UNIMPLEMENTED_PORTS[LE
 export const FAULTY_BASE_URL = `http://localhost:${FAULTY_PORTS[LEG]}/scim`;
 
 export const EDUPASS_UINFIN_BASE_URL = `http://localhost:${EDUPASS_UINFIN_PORTS[LEG]}/scim`;
+
+export const EDUPASS_STRICT_BASE_URL = `http://localhost:${EDUPASS_STRICT_PORTS[LEG]}/scim`;
 
 /**
  * The development signing key committed to appsettings.Development.json.
@@ -180,6 +194,10 @@ function specs(): HostSpec[] {
     {
       port: EDUPASS_UINFIN_PORTS[LEG],
       environment: { SCIM_PROVIDER: "edupass", SCIM_EDUPASS_REQUIRE_UINFIN: "1" },
+    },
+    {
+      port: EDUPASS_STRICT_PORTS[LEG],
+      environment: { SCIM_PROVIDER: "edupass", SCIM_ENFORCE_JWT: "1" },
     },
   ];
 }

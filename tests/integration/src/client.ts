@@ -111,6 +111,9 @@ export async function scim<T = any>(
  *
  * A separate process, not a separate route: Edupass binds `/Users` to its own
  * resource type, and two providers cannot serve one route.
+ *
+ * An explicit `base` still wins, so a caller can send the same request to the
+ * strict-JWT Edupass host instead.
  */
 export async function edupass<T = any>(
   method: string,
@@ -118,7 +121,7 @@ export async function edupass<T = any>(
   body?: unknown,
   options: ScimRequestOptions = {},
 ): Promise<ScimResponse<T>> {
-  return scim<T>(method, path, body, { ...options, base: EDUPASS_BASE_URL });
+  return scim<T>(method, path, body, { ...options, base: options.base ?? EDUPASS_BASE_URL });
 }
 
 /** Sends to the host whose provider implements nothing. */

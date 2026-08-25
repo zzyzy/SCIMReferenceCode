@@ -1,10 +1,20 @@
 import { afterAll, expect, it } from "vitest";
-import { PATCH_APPLIED, SCHEMA_ERROR, SCHEMA_GROUP, SCHEMA_LIST, SCHEMA_PATCH, SCHEMA_USER, unique, type ScimResource } from "../src/client.js";
+import { PATCH_APPLIED, SCHEMA_ERROR, SCHEMA_GROUP, SCHEMA_LIST, SCHEMA_PATCH, SCHEMA_USER, devToken, unique, type ScimResource } from "../src/client.js";
+import { DEV_AUDIENCE, DEV_ISSUER, EDUPASS_STRICT_BASE_URL } from "../src/host.js";
 import { beginCase, call, endCase, summary, writeResults } from "../src/test-plan-recorder.js";
 
 /**
- * The 25 cases of test-plan.xlsx, run against the Edupass host and written back out as a
- * CSV in the plan's own shape.
+ * The two Edupass plans, run against the Edupass host and written back out as a CSV in the
+ * plan's own shape:
+ *
+ * - the 25 cases of test-plan.xlsx, numbered 1 to 25 as the sheet numbers them;
+ * - the cases of "M2-SCIM RP Testcases", the suite Edupass itself runs against a relying
+ *   party, prefixed `RP-` and otherwise keeping the document's own labels (`RP-JWT-1` to
+ *   `RP-JWT-5` for its JWT Authentication tests, `RP-1a`, `RP-1`, `RP-2a` and so on for its
+ *   SCIM Operation tests, with `RP-0` for the setup and pre-clean step it describes).
+ *
+ * The prefix is only to keep the two numbering schemes apart in one CSV; nothing else about
+ * the RP cases departs from the document.
  *
  * Every request goes through the recorder, so the Input and Output columns are the run's
  * actual traffic rather than a description of it. `call` sends to the Edupass host and
@@ -27,6 +37,17 @@ import { beginCase, call, endCase, summary, writeResults } from "../src/test-pla
  * The plan's "Location" is a group whose displayName encodes the location code, as the
  * plan's own sample data shows: `1001_app1_admin`. Adding a user to a location is adding
  * them to that group.
+ *
+ * ## Where the RP cases send their requests
+ *
+ * The SCIM Operation cases go to the ordinary Edupass host, like every case above them.
+ * The JWT Authentication cases go to a second Edupass host started with
+ * SCIM_ENFORCE_JWT=1, because the sample turns issuer, audience, lifetime and
+ * signing-key validation off in Development - and Development is the only environment the
+ * harness can start a host in, the Release branch resolving its keys over OIDC metadata.
+ * Without that host, three of the five cases would be checking a bypass rather than a
+ * rejection. Both hosts run the same provider; the CSV records the full URL whenever a
+ * case leaves the ordinary one.
  */
 
 const EXTENSION = "urn:ietf:params:scim:schemas:extension:Edupass:2.0:User";
@@ -821,5 +842,596 @@ testCase(
     expect(members.filter((item) => item.value === user.id)).toHaveLength(1);
 
     expect(await locationsOf(user.id)).toEqual([displayName]);
+  },
+);
+
+/* ---------------------------------------------------------------------------------------
+ * "M2-SCIM RP Testcases" - the suite Edupass runs against a relying party.
+ * ------------------------------------------------------------------------------------- */
+
+/**
+ * The plan's `<APPCODE>` - the relying party's app code, which its group names embed.
+ *
+ * The reference host has no app code of its own (the sample's JWT audience is
+ * `Microsoft.Security.Bearer`, which is not one), so a fixed stand-in is used. The plan's
+ * own example is `RBS`; only the shape of the name matters to the cases.
+ */
+const APP_CODE = "SCIM";
+
+const USER_ONE = "999900000001";
+const USER_TWO = "999900000002";
+const USER_DUPLICATE = "999900000099";
+
+const GROUP_ONE = `X_${APP_CODE}_TEST1`;
+const GROUP_TWO = `X_${APP_CODE}_TEST2`;
+const GROUP_DUPLICATE = `X_${APP_CODE}_DUP`;
+
+/** Common to the JWT cases: which host the request went to, and why it had to. */
+const StrictHost =
+  "Sent to the Edupass host started with SCIM_ENFORCE_JWT=1. The sample disables issuer, " +
+  "audience, lifetime and signing-key validation in Development, so on the ordinary host " +
+  "this token would be accepted; that bypass is what the second host exists to lift.";
+
+/**
+ * The plan's resources, carried between the plan's cases.
+ *
+ * The RP plan is one ordered sequence - it creates in RP-1 and deletes in RP-7 - so the ids
+ * have to outlive a single case. `fileParallelism: false` and vitest's in-file ordering are
+ * what make that safe.
+ */
+const rp: { userOne?: string; userTwo?: string; groupOne?: string; groupTwo?: string } = {};
+
+function required(value: string | undefined, what: string): string {
+  if (!value) {
+    throw new Error(`${what} was not captured: the case that creates it did not pass`);
+  }
+
+  return value;
+}
+
+function filterFor(expression: string): string {
+  return `?filter=${encodeURIComponent(expression)}`;
+}
+
+function resourcesOf(body: ScimResource): ScimResource[] {
+  return (body["Resources"] as ScimResource[] | undefined) ?? [];
+}
+
+/** The ids of the groups a user is projected into. */
+async function groupIdsOf(identifier: string): Promise<string[]> {
+  const read = await call<ScimResource>("GET", `/Users/${identifier}`);
+  const groups = (read.body["groups"] as { value: string }[] | undefined) ?? [];
+  return groups.map((item) => item.value);
+}
+
+function base64Url(value: string): string {
+  return Buffer.from(value)
+    .toString("base64")
+    .replace(/=+$/u, "")
+    .replace(/\+/gu, "-")
+    .replace(/\//gu, "_");
+}
+
+/** The plan's token: signed with the Edupass key, and its stated 900s TTL. */
+function planToken(overrides: Record<string, unknown> = {}): string {
+  const now = Math.floor(Date.now() / 1000);
+  return devToken({ nbf: now, exp: now + 900, ...overrides });
+}
+
+/**
+ * The plan's expired token.
+ *
+ * An hour past expiry rather than a second, so that the five-minute clock skew the JWT
+ * middleware allows by default cannot make a genuinely expired token look current.
+ */
+function expiredToken(): string {
+  const now = Math.floor(Date.now() / 1000);
+  return devToken({ nbf: now - 7200, exp: now - 3600 });
+}
+
+/** The plan's `alg: none` token: a well-formed JWT with the signature taken off. */
+function unsignedToken(): string {
+  const now = Math.floor(Date.now() / 1000);
+  const header = base64Url(JSON.stringify({ alg: "none", typ: "JWT" }));
+  const payload = base64Url(
+    JSON.stringify({ iss: DEV_ISSUER, aud: DEV_AUDIENCE, nbf: now, exp: now + 900 }),
+  );
+  return `${header}.${payload}.`;
+}
+
+function bearer(token: string): Record<string, string> {
+  return { Authorization: `Bearer ${token}` };
+}
+
+/** The plan's user body. */
+function planUserBody(userName: string, identitySource: string): Record<string, unknown> {
+  return {
+    schemas: [SCHEMA_USER, EXTENSION],
+    userName,
+    externalId: userName,
+    name: { formatted: `Test User ${userName.slice(-3)}` },
+    title: "Test Title",
+    emails: [{ primary: true, type: "WOG", value: `test${userName.slice(-3)}@test.gov.sg` }],
+    // uinFin is omitted deliberately, by the plan's own rule that a field the RP does not
+    // declare at GET /Schemas is left out: this host's extension advertises identityType,
+    // schoolOrHq and identitySource and nothing else. RP-0 checks that is still true.
+    [EXTENSION]: { identitySource, identityType: "Staff", schoolOrHq: "School" },
+  };
+}
+
+function planGroupBody(displayName: string): Record<string, unknown> {
+  return { schemas: [SCHEMA_GROUP], externalId: displayName, displayName };
+}
+
+/** The plan's pre-clean: delete whatever a previous interrupted run left behind. */
+async function preclean(): Promise<void> {
+  for (const userName of [USER_ONE, USER_TWO, USER_DUPLICATE]) {
+    const found = await call<ScimResource>(
+      "GET",
+      `/Users${filterFor(`userName eq "${userName}"`)}`,
+    );
+    expect(found.status).toBe(200);
+
+    for (const resource of resourcesOf(found.body)) {
+      expect((await call("DELETE", `/Users/${resource.id}`)).status).toBe(204);
+    }
+  }
+
+  for (const displayName of [GROUP_ONE, GROUP_TWO, GROUP_DUPLICATE]) {
+    const found = await call<ScimResource>(
+      "GET",
+      `/Groups${filterFor(`displayName eq "${displayName}"`)}`,
+    );
+    expect(found.status).toBe(200);
+
+    for (const resource of resourcesOf(found.body)) {
+      expect((await call("DELETE", `/Groups/${resource.id}`)).status).toBe(204);
+    }
+  }
+}
+
+/**
+ * Everything the service holds under `attribute`, starting from the plan's own bare list.
+ *
+ * The plan asks whether one resource is absent and another still present, and puts that
+ * question to GET /Groups and GET /Users. A single page can answer it only if the page is
+ * the whole collection - and it need not be: this host caps a page at 200, and the rest of
+ * the integration suite leaves far more than that behind on the shared Edupass host. So the
+ * plan's request goes first, and is recorded, and then the remaining pages are followed
+ * before the question is answered. Absent from a truncated page is not absent.
+ */
+async function everyValueOf(collection: string, attribute: string): Promise<string[]> {
+  const first = await call<ScimResource>("GET", `/${collection}`);
+  expect(first.status).toBe(200);
+
+  const total = first.body["totalResults"] as number;
+  const values = resourcesOf(first.body).map((resource) => String(resource[attribute]));
+
+  while (values.length < total) {
+    const page = await call<ScimResource>(
+      "GET",
+      `/${collection}?startIndex=${values.length + 1}&count=200`,
+    );
+    expect(page.status).toBe(200);
+
+    const resources = resourcesOf(page.body);
+    // A page that came back empty would otherwise loop for ever.
+    expect(resources.length).toBeGreaterThan(0);
+
+    values.push(...resources.map((resource) => String(resource[attribute])));
+  }
+
+  return values;
+}
+
+/**
+ * Exactly one of two simultaneous creates succeeded and exactly one was refused 409.
+ *
+ * The plan's wording, and the point of it: not both accepted, which would mean a duplicate
+ * got in, and not both refused, which would mean neither did.
+ */
+function expectOneWinner(responses: { status: number }[]): void {
+  expect(responses.filter((item) => item.status >= 200 && item.status < 300)).toHaveLength(1);
+  expect(responses.filter((item) => item.status === 409)).toHaveLength(1);
+}
+
+testCase(
+  "RP-0",
+  "Setup - read advertised schemas, pre-clean the plan's fixed identifiers",
+  [
+    "The Group schema is advertised, so the plan's group cases run; uinFin is not, so the " +
+      "plan's rule omits it from every body. The plan's fixed identifiers are left clear.",
+    "A valid token goes to the strict host as well, so that the five rejections in RP-JWT-1 " +
+      "to RP-JWT-5 are rejections of the token and not of the host.",
+  ],
+  async () => {
+    const schemas = await call<ScimResource>("GET", "/Schemas");
+    expect(schemas.status).toBe(200);
+    expect(schemas.body.schemas).toContain(SCHEMA_LIST);
+
+    const advertised = resourcesOf(schemas.body);
+    const ids = advertised.map((resource) => resource.id);
+    expect(ids).toContain(SCHEMA_USER);
+    expect(ids).toContain(SCHEMA_GROUP);
+    expect(ids).toContain(EXTENSION);
+
+    const extension = advertised.find((resource) => resource.id === EXTENSION);
+    const attributes = (extension?.["attributes"] as { name: string }[] | undefined) ?? [];
+    expect(attributes.map((attribute) => attribute.name)).not.toContain("uinFin");
+
+    await preclean();
+
+    const accepted = await call("GET", "/Users", undefined, {
+      base: EDUPASS_STRICT_BASE_URL,
+      headers: bearer(planToken()),
+    });
+    expect(accepted.status).toBe(200);
+  },
+);
+
+testCase(
+  "RP-JWT-1",
+  "JWT Authentication - no auth token",
+  ["401: the request carries no Authorization header at all.", StrictHost],
+  async () => {
+    const refused = await call("GET", "/Users", undefined, {
+      base: EDUPASS_STRICT_BASE_URL,
+      anonymous: true,
+    });
+    expect(refused.status).toBe(401);
+  },
+);
+
+testCase(
+  "RP-JWT-2",
+  "JWT Authentication - unsigned JWT",
+  [
+    "401: a well-formed token declaring alg: none with an empty signature is refused.",
+    "The one case of the five the ordinary Edupass host refuses as well: a signature is " +
+      "required whatever the validation flags say.",
+  ],
+  async () => {
+    const refused = await call("GET", "/Users", undefined, {
+      base: EDUPASS_STRICT_BASE_URL,
+      headers: bearer(unsignedToken()),
+    });
+    expect(refused.status).toBe(401);
+  },
+);
+
+testCase(
+  "RP-JWT-3",
+  "JWT Authentication - expired token",
+  ["401: correctly signed, but its exp is an hour in the past.", StrictHost],
+  async () => {
+    const refused = await call("GET", "/Users", undefined, {
+      base: EDUPASS_STRICT_BASE_URL,
+      headers: bearer(expiredToken()),
+    });
+    expect(refused.status).toBe(401);
+  },
+);
+
+testCase(
+  "RP-JWT-4",
+  "JWT Authentication - invalid issuer",
+  ["401: correctly signed, but iss is not the Edupass issuer.", StrictHost],
+  async () => {
+    const refused = await call("GET", "/Users", undefined, {
+      base: EDUPASS_STRICT_BASE_URL,
+      headers: bearer(planToken({ iss: "https://not-the-edupass-issuer.example" })),
+    });
+    expect(refused.status).toBe(401);
+  },
+);
+
+testCase(
+  "RP-JWT-5",
+  "JWT Authentication - invalid audience",
+  ["401: correctly signed, but aud is not the RP's appCode.", StrictHost],
+  async () => {
+    const refused = await call("GET", "/Users", undefined, {
+      base: EDUPASS_STRICT_BASE_URL,
+      headers: bearer(planToken({ aud: `NOT_${APP_CODE}` })),
+    });
+    expect(refused.status).toBe(401);
+  },
+);
+
+testCase(
+  "RP-1a",
+  "Concurrent duplicate user",
+  [
+    "Two simultaneous creates of the same user: exactly one 2xx and exactly one 409. " +
+      "Neither both accepted nor both refused. The winner is deleted again.",
+    "What this is for, in the plan's words: whether the RP's server is safe under " +
+      "concurrent duplicate requests, which a network retry can produce.",
+  ],
+  async () => {
+    const body = planUserBody(USER_DUPLICATE, "HRPS");
+    const responses = await Promise.all([
+      call<ScimResource>("POST", "/Users", body),
+      call<ScimResource>("POST", "/Users", body),
+    ]);
+
+    expectOneWinner(responses);
+
+    const winner = responses.find((item) => item.status >= 200 && item.status < 300)!;
+    expect((await call("DELETE", `/Users/${winner.body.id}`)).status).toBe(204);
+  },
+);
+
+testCase(
+  "RP-1",
+  "Create User",
+  [
+    "Both users are created, and each is then found by a userName eq filter as exactly one " +
+      "result carrying the matching externalId.",
+    "The two differ in identitySource - HRPS and MIMS - as the plan's two bodies do.",
+  ],
+  async () => {
+    const one = await call<ScimResource>("POST", "/Users", planUserBody(USER_ONE, "HRPS"));
+    expect(one.status).toBe(201);
+    rp.userOne = one.body.id;
+
+    const two = await call<ScimResource>("POST", "/Users", planUserBody(USER_TWO, "MIMS"));
+    expect(two.status).toBe(201);
+    rp.userTwo = two.body.id;
+
+    for (const userName of [USER_ONE, USER_TWO]) {
+      const found = await call<ScimResource>(
+        "GET",
+        `/Users${filterFor(`userName eq "${userName}"`)}`,
+      );
+      expect(found.status).toBe(200);
+
+      const resources = resourcesOf(found.body);
+      expect(resources).toHaveLength(1);
+      expect(resources[0]!["externalId"]).toBe(userName);
+    }
+  },
+);
+
+testCase(
+  "RP-2",
+  "Update User",
+  ["The replace takes, and the next read returns the new name.formatted."],
+  async () => {
+    const id = required(rp.userOne, "user 1");
+
+    const replaced = await call<ScimResource>("PUT", `/Users/${id}`, {
+      ...planUserBody(USER_ONE, "HRPS"),
+      id,
+      name: { formatted: "Test User 001 Updated" },
+    });
+    expect(replaced.status).toBe(200);
+
+    const read = await call<ScimResource>("GET", `/Users/${id}`);
+    expect(read.status).toBe(200);
+    expect((read.body["name"] as { formatted?: string }).formatted).toBe("Test User 001 Updated");
+  },
+);
+
+testCase(
+  "RP-2a",
+  "Get non-existent User",
+  ["404 carrying a SCIM error body, for an identifier that is not a server-assigned id."],
+  async () => {
+    const missing = await call("GET", "/Users/non-existent-user-id");
+    expect(missing.status).toBe(404);
+    expect(missing.body.schemas).toContain(SCHEMA_ERROR);
+  },
+);
+
+testCase(
+  "RP-2b",
+  "Update non-existent User",
+  [
+    "404: the id in the path is what is not found, and it is looked up before the body is " +
+      "considered.",
+    "The body carries a userName no user holds, so that a 409 on a duplicate userName " +
+      "cannot be mistaken for the 404 the case is about.",
+  ],
+  async () => {
+    const missing = await call("PUT", "/Users/non-existent-user-id", {
+      ...planUserBody("999900000098", "HRPS"),
+      id: "non-existent-user-id",
+    });
+    expect(missing.status).toBe(404);
+    expect(missing.body.schemas).toContain(SCHEMA_ERROR);
+  },
+);
+
+testCase(
+  "RP-3a",
+  "Concurrent duplicate group",
+  [
+    "Two simultaneous creates of the same group: exactly one 2xx and exactly one 409. The " +
+      "winner is deleted again.",
+    "The group half of RP-1a, and for the same reason.",
+  ],
+  async () => {
+    const body = planGroupBody(GROUP_DUPLICATE);
+    const responses = await Promise.all([
+      call<ScimResource>("POST", "/Groups", body),
+      call<ScimResource>("POST", "/Groups", body),
+    ]);
+
+    expectOneWinner(responses);
+
+    const winner = responses.find((item) => item.status >= 200 && item.status < 300)!;
+    expect((await call("DELETE", `/Groups/${winner.body.id}`)).status).toBe(204);
+  },
+);
+
+testCase(
+  "RP-3",
+  "Create Group",
+  [
+    "Both groups are created, and each is then found by a displayName eq filter as exactly " +
+      "one result carrying the matching externalId.",
+  ],
+  async () => {
+    const one = await call<ScimResource>("POST", "/Groups", planGroupBody(GROUP_ONE));
+    expect(one.status).toBe(201);
+    rp.groupOne = one.body.id;
+
+    const two = await call<ScimResource>("POST", "/Groups", planGroupBody(GROUP_TWO));
+    expect(two.status).toBe(201);
+    rp.groupTwo = two.body.id;
+
+    for (const displayName of [GROUP_ONE, GROUP_TWO]) {
+      const found = await call<ScimResource>(
+        "GET",
+        `/Groups${filterFor(`displayName eq "${displayName}"`)}`,
+      );
+      expect(found.status).toBe(200);
+
+      const resources = resourcesOf(found.body);
+      expect(resources).toHaveLength(1);
+      expect(resources[0]!["externalId"]).toBe(displayName);
+    }
+  },
+);
+
+testCase("RP-3b", "Get non-existent Group", ["404 carrying a SCIM error body."], async () => {
+  const missing = await call("GET", "/Groups/non-existent-group-id");
+  expect(missing.status).toBe(404);
+  expect(missing.body.schemas).toContain(SCHEMA_ERROR);
+});
+
+testCase(
+  "RP-3c",
+  "Update memberships for non-existent Group",
+  [
+    "404: a membership patch names the group in the path, so an unknown group is not found " +
+      "rather than silently accepted.",
+  ],
+  async () => {
+    const missing = await call(
+      "PATCH",
+      "/Groups/non-existent-group-id",
+      patch({ op: "add", path: "members", value: [{ value: required(rp.userOne, "user 1") }] }),
+    );
+    expect(missing.status).toBe(404);
+  },
+);
+
+testCase(
+  "RP-4",
+  "Add Group membership",
+  [
+    "Both users are added in one patch, and the result is verified from both ends: each " +
+      "user's groups carries the group, and the group's members carries both users.",
+    "Verifying only one side would pass on a provider that wrote the membership but could " +
+      "not project it, which is the failure Edupass would meet first.",
+  ],
+  async () => {
+    const groupId = required(rp.groupOne, "group 1");
+    const userOne = required(rp.userOne, "user 1");
+    const userTwo = required(rp.userTwo, "user 2");
+
+    const added = await call(
+      "PATCH",
+      `/Groups/${groupId}`,
+      patch({ op: "add", path: "members", value: [{ value: userOne }, { value: userTwo }] }),
+    );
+    expect(PATCH_APPLIED).toContain(added.status);
+
+    const group = await call<ScimResource>("GET", `/Groups/${groupId}`);
+    const members = ((group.body["members"] as { value: string }[] | undefined) ?? []).map(
+      (member) => member.value,
+    );
+    expect(members).toContain(userOne);
+    expect(members).toContain(userTwo);
+
+    expect(await groupIdsOf(userOne)).toContain(groupId);
+    expect(await groupIdsOf(userTwo)).toContain(groupId);
+  },
+);
+
+testCase(
+  "RP-5",
+  "Remove Group membership",
+  [
+    "A value-filtered remove path takes user 1 out and leaves user 2 in, on both the group " +
+      "and the user. User 2 is then removed as well.",
+    'The plan\'s path is members[value eq "{id}"], not a members value list: dropping the ' +
+      "other member is the failure this case is looking for.",
+  ],
+  async () => {
+    const groupId = required(rp.groupOne, "group 1");
+    const userOne = required(rp.userOne, "user 1");
+    const userTwo = required(rp.userTwo, "user 2");
+
+    const removed = await call(
+      "PATCH",
+      `/Groups/${groupId}`,
+      patch({ op: "remove", path: `members[value eq "${userOne}"]` }),
+    );
+    expect(PATCH_APPLIED).toContain(removed.status);
+
+    const group = await call<ScimResource>("GET", `/Groups/${groupId}`);
+    const members = ((group.body["members"] as { value: string }[] | undefined) ?? []).map(
+      (member) => member.value,
+    );
+    expect(members).not.toContain(userOne);
+    expect(members).toContain(userTwo);
+
+    expect(await groupIdsOf(userOne)).not.toContain(groupId);
+    expect(await groupIdsOf(userTwo)).toContain(groupId);
+
+    const removedTwo = await call(
+      "PATCH",
+      `/Groups/${groupId}`,
+      patch({ op: "remove", path: `members[value eq "${userTwo}"]` }),
+    );
+    expect(PATCH_APPLIED).toContain(removedTwo.status);
+  },
+);
+
+testCase(
+  "RP-6",
+  "Delete Group",
+  [
+    "Group 1 is deleted and is absent from the next list, while group 2 is still there. " +
+      "Group 2 is then deleted too, so the run leaves nothing behind.",
+    "The plan's list is followed to its last page before absence is concluded: on the " +
+      "shared host the first page need not be the whole collection.",
+  ],
+  async () => {
+    const groupOne = required(rp.groupOne, "group 1");
+    const groupTwo = required(rp.groupTwo, "group 2");
+
+    expect((await call("DELETE", `/Groups/${groupOne}`)).status).toBe(204);
+
+    const names = await everyValueOf("Groups", "displayName");
+    expect(names).not.toContain(GROUP_ONE);
+    expect(names).toContain(GROUP_TWO);
+
+    expect((await call("DELETE", `/Groups/${groupTwo}`)).status).toBe(204);
+  },
+);
+
+testCase(
+  "RP-7",
+  "Delete User",
+  [
+    "User 1 is deleted and is absent from the next list, while user 2 is still there. User " +
+      "2 is then deleted too, so the run leaves nothing behind.",
+    "The plan's list is followed to its last page before absence is concluded: on the " +
+      "shared host the first page need not be the whole collection.",
+  ],
+  async () => {
+    const userOne = required(rp.userOne, "user 1");
+    const userTwo = required(rp.userTwo, "user 2");
+
+    expect((await call("DELETE", `/Users/${userOne}`)).status).toBe(204);
+
+    const names = await everyValueOf("Users", "userName");
+    expect(names).not.toContain(USER_ONE);
+    expect(names).toContain(USER_TWO);
+
+    expect((await call("DELETE", `/Users/${userTwo}`)).status).toBe(204);
   },
 );
