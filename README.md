@@ -290,6 +290,12 @@ store for a database and the rules come along unchanged. `InMemoryEduPassProvide
 in-memory store; `InMemoryUserProvider` / `InMemoryGroupProvider` in the sample are the plain
 non-profile equivalents.
 
+Those two store **domain entities rather than SCIM resources**: `UserEntity` and `GroupEntity`
+in `Microsoft.SCIM.WebHostSample/Domain`, with `ScimUserMapper` / `ScimGroupMapper` translating
+by hand at the edge. That is the arrangement a database-backed relying party needs — the wire
+format and the stored model change independently — and it is what the sample demonstrates for
+you to copy. See `docs/integration-guide.md` step 2.
+
 ### 4.7 Schema extensions
 
 To add attributes to `/Users`:

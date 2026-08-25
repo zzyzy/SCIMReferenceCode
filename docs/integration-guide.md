@@ -109,8 +109,56 @@ Two things to know:
 `InMemoryProvider` in `Microsoft.SCIM.WebHostSample/Provider` is a complete worked example.
 It is a reference, not a starting point — it stores everything in process memory.
 
-If you serve both `/Users` and `/Groups`, `InMemoryEduPassProvider` in `SCIM.EduPass/Provider`
-also shows how to keep the two consistent — see `edupass-integration.md` §3.
+It does, however, store data the way you will want to: as **domain entities, not SCIM
+resources**. `Microsoft.SCIM.WebHostSample/Domain` holds `UserEntity` and `GroupEntity` — plain
+columns, child rows with their own keys, UTC timestamps, nothing from `Microsoft.SCIM` — and
+`ScimUserMapper` / `ScimGroupMapper` translate at the edge. Every provider method reads the same
+way: map in, apply your rules, map back out. Swap the dictionary for a `DbContext` and the
+mapping, the rules and the wire format all stay as they are.
+
+### Mapping to your own tables
+
+Write the mapping by hand. A mapper that matches properties by name ties the two models
+together, so renaming a column changes what you send on the wire, and adding one starts
+publishing it. Written out, the list of attributes you exchange is something a person can read.
+
+Rules that are easy to miss:
+
+- **Decide where `id` lives.** You mint it on create (see above). Use it as your primary key, or
+  keep it in its own unique column beside your key. It must never change — the client uses it in
+  every later call.
+- **`groups` on a user is derived.** Store membership once, on the group, and build `groups`
+  when you read a user. Stored twice, the two copies can disagree.
+- **Map every sub-attribute of a multi-valued entry.** A membership rebuilt from `value` alone
+  loses the `$ref`, `display` and `type` the client sent.
+- **Keep what you do not model.** An extension with no column goes to `ExtensionData` whole —
+  one JSON column — because a read has to return what a write supplied.
+- **Patch a projection, not the row.** Map the row to a resource, apply the patch, map it back,
+  and save only if every operation succeeded. That is what makes a PATCH all-or-nothing
+  (RFC 7644 §3.5.2).
+- **Return a fresh object on every read.** The library writes to what you hand it: it fills in
+  `groups`, and carries `meta.created` forward on a PUT.
+
+Give the database the rules as well. The provider checks them on read, but two requests can
+arrive at once: unique `userName`, unique group `displayName`, unique (group, member), and
+cascading deletes from a group and from a user to their memberships. Use a case-insensitive
+collation, or normalise on write — a member added as `ABC` and removed as `abc` is the usual bug.
+
+### If Edupass provisions you
+
+Derive from `BaseEduPassScimProvider` instead, and implement `IEduPassStore`
+(`SCIM.EduPass/Provider`). The base class already does the Edupass validation, the `groups`
+projection, the group and user delete cleanups and the uniqueness rules, so you write two
+things: `BeginAsync`, which opens a store, and the store itself.
+
+Here the base class mints `id` before it calls your store, so map the value it gives you rather
+than generating your own.
+
+One store instance serves one request, and it is a transaction. `CompleteAsync` commits;
+disposing without it must roll back, which is what keeps a delete atomic when it also has to
+strip memberships. `IEduPassStore` takes and returns SCIM types, so **your mapping lives inside
+the store** and your entities never leave it. `InMemoryEduPassProvider` is the worked example,
+and `edupass-integration.md` §3 covers the obligations it meets for you.
 
 Logging needs no SCIM-specific wiring: the library takes `ILogger` and controllers resolve
 `ILogger<T>`.

@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net48</TargetFramework>
@@ -45,6 +45,7 @@
     drift apart. See MULTI-TARGET-PLAN.md D6.
   -->
   <ItemGroup>
+    <Compile Include="..\Microsoft.SCIM.WebHostSample\Domain\**\*.cs" Link="Domain\%(Filename)%(Extension)" />
     <Compile Include="..\Microsoft.SCIM.WebHostSample\Provider\**\*.cs" Link="Provider\%(Filename)%(Extension)" />
     <Compile Include="..\Microsoft.SCIM.WebHostSample\Resources\**\*.cs" Link="Resources\%(Filename)%(Extension)" />
     <Compile Include="..\Microsoft.SCIM.WebHostSample\SampleStartupBanner.cs" Link="SampleStartupBanner.cs" />

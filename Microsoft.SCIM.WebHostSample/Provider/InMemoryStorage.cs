@@ -7,11 +7,22 @@ namespace Microsoft.SCIM.WebHostSample.Provider
     using System.Linq;
     using System.Linq.Expressions;
     using Microsoft.SCIM;
+    using Microsoft.SCIM.WebHostSample.Domain;
 
     public class InMemoryStorage
     {
-        internal readonly IDictionary<string, Core2Group> Groups;
-        internal readonly IDictionary<string, Core2EnterpriseUser> Users;
+        /// <summary>
+        /// The stored rows, as domain entities rather than SCIM resources.
+        /// </summary>
+        /// <remarks>
+        /// Standing in for two tables. A SCIM resource is the shape of a request and a response;
+        /// what a relying party keeps is its own, so the dictionaries hold
+        /// <see cref="Domain.UserEntity"/> and <see cref="Domain.GroupEntity"/> and the providers
+        /// map at the edge. Replacing this class with a DbContext then changes where the rows
+        /// live without touching the mapping, the providers' rules, or the wire format.
+        /// </remarks>
+        internal readonly IDictionary<string, GroupEntity> Groups;
+        internal readonly IDictionary<string, UserEntity> Users;
 
         /// <summary>
         /// Guards both dictionaries.
@@ -29,8 +40,8 @@ namespace Microsoft.SCIM.WebHostSample.Provider
 
         private InMemoryStorage()
         {
-            this.Groups = new Dictionary<string, Core2Group>();
-            this.Users = new Dictionary<string, Core2EnterpriseUser>();
+            this.Groups = new Dictionary<string, GroupEntity>();
+            this.Users = new Dictionary<string, UserEntity>();
         }
 
         private static readonly Lazy<InMemoryStorage> InstanceValue =

@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
+// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
 
 namespace Microsoft.SCIM.WebHostSample.Provider
 {
@@ -10,7 +10,12 @@ namespace Microsoft.SCIM.WebHostSample.Provider
     using System.Threading.Tasks;
     using System.Web.Http;
     using Microsoft.SCIM;
+    using Microsoft.SCIM.WebHostSample.Domain;
 
+    /// <summary>
+    /// A group provider over a store of domain entities. See <see cref="InMemoryUserProvider"/>
+    /// for the arrangement; this is the same one, over the group aggregate and its membership.
+    /// </summary>
     public class InMemoryGroupProvider : ProviderBase
     {
         private readonly InMemoryStorage storage;
@@ -31,31 +36,37 @@ namespace Microsoft.SCIM.WebHostSample.Provider
 
                 Core2Group group = resource as Core2Group;
 
-                if (string.IsNullOrWhiteSpace(group.DisplayName))
+                if (string.IsNullOrWhiteSpace(group?.DisplayName))
                 {
                     throw new HttpResponseException(HttpStatusCode.BadRequest);
                 }
 
-                IEnumerable<Core2Group> exisitingGroups = this.storage.Groups.Values;
                 if
                 (
-                    exisitingGroups.Any(
-                        (Core2Group exisitingGroup) =>
-                            string.Equals(exisitingGroup.DisplayName, group.DisplayName, StringComparison.Ordinal))
+                    this.storage.Groups.Values.Any(
+                        (GroupEntity existing) =>
+                            string.Equals(existing.DisplayName, group.DisplayName, StringComparison.Ordinal))
                 )
                 {
                     throw new HttpResponseException(HttpStatusCode.Conflict);
                 }
-                //Update Metadata
+
+                GroupEntity entity = ScimGroupMapper.ToEntity(group);
+
                 DateTime created = DateTime.UtcNow;
-                group.Metadata.Created = created;
-                group.Metadata.LastModified = created;
+                entity.Id = Guid.NewGuid().ToString();
+                entity.CreatedUtc = created;
+                entity.LastModifiedUtc = created;
 
-                string resourceIdentifier = Guid.NewGuid().ToString();
-                resource.Identifier = resourceIdentifier;
-                this.storage.Groups.Add(resourceIdentifier, group);
+                // The membership rows carry the group's key, which is only known now.
+                foreach (GroupMemberEntity member in entity.Members)
+                {
+                    member.GroupId = entity.Id;
+                }
 
-                return Task.FromResult(resource);
+                this.storage.Groups.Add(entity.Id, entity);
+
+                return Task.FromResult<Resource>(ScimGroupMapper.ToScim(entity));
             }
         }
 
@@ -103,19 +114,13 @@ namespace Microsoft.SCIM.WebHostSample.Provider
                     throw new ArgumentException(SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidParameters);
                 }
 
-                IEnumerable<Resource> results;
                 IFilter queryFilter = parameters.AlternateFilters.SingleOrDefault();
 
-                var predicate = PredicateBuilder.False<Core2Group>();
-                Expression<Func<Core2Group, bool>> predicateAnd;
-                predicateAnd = PredicateBuilder.True<Core2Group>();
+                var predicate = PredicateBuilder.False<GroupEntity>();
+                Expression<Func<GroupEntity, bool>> predicateAnd;
+                predicateAnd = PredicateBuilder.True<GroupEntity>();
 
-                if (queryFilter == null)
-                {
-                    results = this.storage.Groups.Values.Select(
-                        (Core2Group user) => user as Resource);
-                }
-                else
+                if (queryFilter != null)
                 {
                     if (string.IsNullOrWhiteSpace(queryFilter.AttributePath))
                     {
@@ -132,24 +137,28 @@ namespace Microsoft.SCIM.WebHostSample.Provider
                         throw new NotSupportedException(string.Format(SystemForCrossDomainIdentityManagementServiceResources.ExceptionFilterOperatorNotSupportedTemplate, queryFilter.FilterOperator));
                     }
 
-
                     if (queryFilter.AttributePath.Equals(AttributeNames.DisplayName))
                     {
-                    
                         string displayName = queryFilter.ComparisonValue;
                         predicateAnd = predicateAnd.And(p => string.Equals(p.DisplayName, displayName, StringComparison.OrdinalIgnoreCase));
-                  
                     }
                     else
                     {
                         throw new NotSupportedException(string.Format(SystemForCrossDomainIdentityManagementServiceResources.ExceptionFilterAttributePathNotSupportedTemplate, queryFilter.AttributePath));
                     }
                 }
-            
-                predicate = predicate.Or(predicateAnd);
-                results = this.storage.Groups.Values.Where(predicate.Compile());
 
-                return Task.FromResult(results.ToArray());
+                predicate = predicate.Or(predicateAnd);
+
+                Resource[] results =
+                    this.storage
+                        .Groups
+                        .Values
+                        .Where(predicate.Compile())
+                        .Select((GroupEntity entity) => (Resource)ScimGroupMapper.ToScim(entity))
+                        .ToArray();
+
+                return Task.FromResult(results);
             }
         }
 
@@ -164,35 +173,40 @@ namespace Microsoft.SCIM.WebHostSample.Provider
 
                 Core2Group group = resource as Core2Group;
 
-                if (string.IsNullOrWhiteSpace(group.DisplayName))
+                if (string.IsNullOrWhiteSpace(group?.DisplayName))
                 {
                     throw new HttpResponseException(HttpStatusCode.BadRequest);
                 }
 
-                Core2Group exisitingGroups = resource as Core2Group;
                 if
                 (
                     this.storage.Groups.Values.Any(
-                        (Core2Group exisitingUser) =>
-                            string.Equals(exisitingUser.DisplayName, group.DisplayName, StringComparison.Ordinal) &&
-                            !string.Equals(exisitingUser.Identifier, group.Identifier, StringComparison.OrdinalIgnoreCase))
+                        (GroupEntity existing) =>
+                            string.Equals(existing.DisplayName, group.DisplayName, StringComparison.Ordinal) &&
+                            !string.Equals(existing.Id, group.Identifier, StringComparison.OrdinalIgnoreCase))
                 )
                 {
                     throw new HttpResponseException(HttpStatusCode.Conflict);
                 }
 
-                if (!this.storage.Groups.TryGetValue(group.Identifier, out Core2Group _))
+                if (!this.storage.Groups.TryGetValue(group.Identifier, out GroupEntity stored))
                 {
                     throw new HttpResponseException(HttpStatusCode.NotFound);
                 }
 
-                // Update metadata
-                group.Metadata.Created = exisitingGroups.Metadata.Created;
-                group.Metadata.LastModified = DateTime.UtcNow;
+                GroupEntity replacement = ScimGroupMapper.ToEntity(group);
+                replacement.Id = stored.Id;
+                replacement.CreatedUtc = stored.CreatedUtc;
+                replacement.LastModifiedUtc = DateTime.UtcNow;
 
-                this.storage.Groups[group.Identifier] = group;
-                Resource result = group as Resource;
-                return Task.FromResult(result);
+                foreach (GroupMemberEntity member in replacement.Members)
+                {
+                    member.GroupId = replacement.Id;
+                }
+
+                this.storage.Groups[replacement.Id] = replacement;
+
+                return Task.FromResult<Resource>(ScimGroupMapper.ToScim(replacement));
             }
         }
 
@@ -217,13 +231,9 @@ namespace Microsoft.SCIM.WebHostSample.Provider
 
                 string identifier = parameters.ResourceIdentifier.Identifier;
 
-                if (this.storage.Groups.ContainsKey(identifier))
+                if (this.storage.Groups.TryGetValue(identifier, out GroupEntity entity))
                 {
-                    if (this.storage.Groups.TryGetValue(identifier, out Core2Group group))
-                    {
-                        Resource result = group as Resource;
-                        return Task.FromResult(result);
-                    }
+                    return Task.FromResult<Resource>(ScimGroupMapper.ToScim(entity));
                 }
 
                 throw new HttpResponseException(HttpStatusCode.NotFound);
@@ -263,37 +273,41 @@ namespace Microsoft.SCIM.WebHostSample.Provider
                     throw new NotSupportedException(unsupportedPatchTypeName);
                 }
 
-                if (this.storage.Groups.TryGetValue(patch.ResourceIdentifier.Identifier, out Core2Group group))
-                {
-                    // RFC 7644 section 3.5.2: all of the operations, or none. Apply.Apply mutates
-                    // in order, so a failure part-way through would otherwise leave the earlier
-                    // operations applied. Patch a copy and publish it only once every operation
-                    // has succeeded.
-                    Core2Group candidate = ResourceCloner.Clone(group);
-                    candidate.Apply(patchRequest);
-
-                    // The same uniqueness rule CreateAsync and ReplaceAsync enforce. A PATCH can
-                    // rename a group too, and without this it could rename one onto another's
-                    // displayName - leaving two groups a client cannot tell apart.
-                    if
-                    (
-                        this.storage.Groups.Values.Any(
-                            (Core2Group existing) =>
-                                string.Equals(existing.DisplayName, candidate.DisplayName, StringComparison.Ordinal)
-                                && !string.Equals(existing.Identifier, candidate.Identifier, StringComparison.OrdinalIgnoreCase))
-                    )
-                    {
-                        throw new HttpResponseException(HttpStatusCode.Conflict);
-                    }
-
-                    candidate.Metadata.LastModified = DateTime.UtcNow;
-
-                    this.storage.Groups[patch.ResourceIdentifier.Identifier] = candidate;
-                }
-                else
+                if (!this.storage.Groups.TryGetValue(patch.ResourceIdentifier.Identifier, out GroupEntity stored))
                 {
                     throw new HttpResponseException(HttpStatusCode.NotFound);
                 }
+
+                // Projected out, patched, mapped back in. See the matching comment in
+                // InMemoryUserProvider.UpdateAsync for why that is what makes a PATCH atomic.
+                Core2Group candidate = ScimGroupMapper.ToScim(stored);
+                candidate.Apply(patchRequest);
+
+                // The same uniqueness rule CreateAsync and ReplaceAsync enforce. A PATCH can
+                // rename a group too, and without this it could rename one onto another's
+                // displayName - leaving two groups a client cannot tell apart.
+                if
+                (
+                    this.storage.Groups.Values.Any(
+                        (GroupEntity existing) =>
+                            string.Equals(existing.DisplayName, candidate.DisplayName, StringComparison.Ordinal)
+                            && !string.Equals(existing.Id, candidate.Identifier, StringComparison.OrdinalIgnoreCase))
+                )
+                {
+                    throw new HttpResponseException(HttpStatusCode.Conflict);
+                }
+
+                GroupEntity patched = ScimGroupMapper.ToEntity(candidate);
+                patched.Id = stored.Id;
+                patched.CreatedUtc = stored.CreatedUtc;
+                patched.LastModifiedUtc = DateTime.UtcNow;
+
+                foreach (GroupMemberEntity member in patched.Members)
+                {
+                    member.GroupId = patched.Id;
+                }
+
+                this.storage.Groups[patched.Id] = patched;
 
                 return Task.CompletedTask;
             }

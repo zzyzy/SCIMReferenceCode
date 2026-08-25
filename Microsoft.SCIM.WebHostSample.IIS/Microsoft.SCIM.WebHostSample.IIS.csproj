@@ -63,6 +63,7 @@
     MULTI-TARGET-PLAN.md D6.
   -->
   <ItemGroup>
+    <Compile Include="..\Microsoft.SCIM.WebHostSample\Domain\**\*.cs" Link="Domain\%(Filename)%(Extension)" />
     <Compile Include="..\Microsoft.SCIM.WebHostSample\Provider\**\*.cs" Link="Provider\%(Filename)%(Extension)" />
     <Compile Include="..\Microsoft.SCIM.WebHostSample\Resources\**\*.cs" Link="Resources\%(Filename)%(Extension)" />
     <None Include="..\Microsoft.SCIM.WebHostSample\appsettings*.json" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />

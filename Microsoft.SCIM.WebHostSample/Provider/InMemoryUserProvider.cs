@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
+// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
 
 namespace Microsoft.SCIM.WebHostSample.Provider
 {
@@ -10,7 +10,22 @@ namespace Microsoft.SCIM.WebHostSample.Provider
     using System.Threading.Tasks;
     using System.Web.Http;
     using Microsoft.SCIM;
+    using Microsoft.SCIM.WebHostSample.Domain;
 
+    /// <summary>
+    /// A user provider over a store of domain entities.
+    /// </summary>
+    /// <remarks>
+    /// Every method has the same three parts: map the request in, apply the domain's rules, map
+    /// the stored row back out. The SCIM resource never reaches the store and the entity never
+    /// reaches the wire, so the two can be changed independently - which is the arrangement a
+    /// database-backed relying party needs, and the reason this sample maps rather than storing
+    /// the resource it was sent.
+    ///
+    /// Queries filter over the entity, not over the resource, because that is what a database
+    /// can answer: the predicates below translate a SCIM filter into a predicate on columns and
+    /// would compose into a SQL WHERE clause unchanged.
+    /// </remarks>
     public class InMemoryUserProvider : ProviderBase
     {
         private readonly InMemoryStorage storage;
@@ -30,32 +45,32 @@ namespace Microsoft.SCIM.WebHostSample.Provider
                 }
 
                 Core2EnterpriseUser user = resource as Core2EnterpriseUser;
-                if (string.IsNullOrWhiteSpace(user.UserName))
+                if (string.IsNullOrWhiteSpace(user?.UserName))
                 {
                     throw new HttpResponseException(HttpStatusCode.BadRequest);
                 }
 
-                IEnumerable<Core2EnterpriseUser> exisitingUsers = this.storage.Users.Values;
                 if
                 (
-                    exisitingUsers.Any(
-                        (Core2EnterpriseUser exisitingUser) =>
-                            string.Equals(exisitingUser.UserName, user.UserName, StringComparison.Ordinal))
+                    this.storage.Users.Values.Any(
+                        (UserEntity existing) =>
+                            string.Equals(existing.UserName, user.UserName, StringComparison.Ordinal))
                 )
                 {
                     throw new HttpResponseException(HttpStatusCode.Conflict);
                 }
 
-                // Update metadata
-                DateTime created = DateTime.UtcNow;
-                user.Metadata.Created = created;
-                user.Metadata.LastModified = created; 
-            
-                string resourceIdentifier = Guid.NewGuid().ToString();
-                resource.Identifier = resourceIdentifier;
-                this.storage.Users.Add(resourceIdentifier, user);
+                UserEntity entity = ScimUserMapper.ToEntity(user);
 
-                return Task.FromResult(resource);
+                // The store's to assign, which is why the mapper leaves them alone.
+                DateTime created = DateTime.UtcNow;
+                entity.Id = Guid.NewGuid().ToString();
+                entity.CreatedUtc = created;
+                entity.LastModifiedUtc = created;
+
+                this.storage.Users.Add(entity.Id, entity);
+
+                return Task.FromResult<Resource>(ScimUserMapper.ToScim(entity));
             }
         }
 
@@ -103,22 +118,19 @@ namespace Microsoft.SCIM.WebHostSample.Provider
                     throw new ArgumentException(SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidParameters);
                 }
 
-                IEnumerable<Resource> results;
-                var predicate = PredicateBuilder.False<Core2EnterpriseUser>();
-                Expression<Func<Core2EnterpriseUser, bool>> predicateAnd;
-
+                IEnumerable<UserEntity> matches;
+                var predicate = PredicateBuilder.False<UserEntity>();
+                Expression<Func<UserEntity, bool>> predicateAnd;
 
                 if (parameters.AlternateFilters.Count <= 0)
                 {
-                    results = this.storage.Users.Values.Select(
-                        (Core2EnterpriseUser user) => user as Resource);
+                    matches = this.storage.Users.Values;
                 }
                 else
                 {
-
                     foreach (IFilter queryFilter in parameters.AlternateFilters)
                     {
-                        predicateAnd = PredicateBuilder.True<Core2EnterpriseUser>();
+                        predicateAnd = PredicateBuilder.True<UserEntity>();
 
                         IFilter andFilter = queryFilter;
                         IFilter currentFilter = andFilter;
@@ -134,7 +146,8 @@ namespace Microsoft.SCIM.WebHostSample.Provider
                                 throw new ArgumentException(SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidParameters);
                             }
 
-                            // UserName filter
+                            // The filter names a SCIM attribute; the predicate names a column.
+                            // Translating here is what keeps the store ignorant of SCIM.
                             else if (andFilter.AttributePath.Equals(AttributeNames.UserName, StringComparison.OrdinalIgnoreCase))
                             {
                                 string userName = andFilter.ComparisonValue;
@@ -179,9 +192,7 @@ namespace Microsoft.SCIM.WebHostSample.Provider
                                 }
 
                                 string externalIdentifier = andFilter.ComparisonValue;
-                                predicateAnd = predicateAnd.And(p => string.Equals(p.ExternalIdentifier, externalIdentifier, StringComparison.OrdinalIgnoreCase));
-
-                           
+                                predicateAnd = predicateAnd.And(p => string.Equals(p.ExternalId, externalIdentifier, StringComparison.OrdinalIgnoreCase));
                             }
 
                             //Active Filter
@@ -194,8 +205,7 @@ namespace Microsoft.SCIM.WebHostSample.Provider
                                 }
 
                                 bool active = bool.Parse(andFilter.ComparisonValue);
-                                predicateAnd = predicateAnd.And(p => p.Active == active);
-
+                                predicateAnd = predicateAnd.And(p => p.IsActive == active);
                             }
 
                             //LastModified filter
@@ -204,33 +214,26 @@ namespace Microsoft.SCIM.WebHostSample.Provider
                                 if (andFilter.FilterOperator == ComparisonOperator.GreaterThan)
                                 {
                                     DateTime comparisonValue = DateTime.Parse(andFilter.ComparisonValue).ToUniversalTime();
-                                    predicateAnd = predicateAnd.And(p => p.Metadata.LastModified > comparisonValue);
+                                    predicateAnd = predicateAnd.And(p => p.LastModifiedUtc > comparisonValue);
                                 }
                                 else if (andFilter.FilterOperator == ComparisonOperator.LessThan)
                                 {
                                     DateTime comparisonValue = DateTime.Parse(andFilter.ComparisonValue).ToUniversalTime();
-                                    predicateAnd = predicateAnd.And(p => p.Metadata.LastModified < comparisonValue);
+                                    predicateAnd = predicateAnd.And(p => p.LastModifiedUtc < comparisonValue);
                                 }
                                 else if (andFilter.FilterOperator == ComparisonOperator.EqualOrGreaterThan)
                                 {
                                     DateTime comparisonValue = DateTime.Parse(andFilter.ComparisonValue).ToUniversalTime();
-                                    predicateAnd = predicateAnd.And(p => p.Metadata.LastModified >= comparisonValue);
-
-                               
+                                    predicateAnd = predicateAnd.And(p => p.LastModifiedUtc >= comparisonValue);
                                 }
                                 else if (andFilter.FilterOperator == ComparisonOperator.EqualOrLessThan)
                                 {
                                     DateTime comparisonValue = DateTime.Parse(andFilter.ComparisonValue).ToUniversalTime();
-                                    predicateAnd = predicateAnd.And(p => p.Metadata.LastModified <= comparisonValue);
-
-                                
+                                    predicateAnd = predicateAnd.And(p => p.LastModifiedUtc <= comparisonValue);
                                 }
                                 else
                                     throw new NotSupportedException(
                                         string.Format(SystemForCrossDomainIdentityManagementServiceResources.ExceptionFilterOperatorNotSupportedTemplate, andFilter.FilterOperator));
-
-
-
                             }
                             else
                                 throw new NotSupportedException(
@@ -242,16 +245,18 @@ namespace Microsoft.SCIM.WebHostSample.Provider
                         } while (currentFilter.AdditionalFilter != null);
 
                         predicate = predicate.Or(predicateAnd);
-
                     }
 
-                    results = this.storage.Users.Values.Where(predicate.Compile());
+                    matches = this.storage.Users.Values.Where(predicate.Compile());
                 }
 
                 // Every match, not a page: ProviderBase.PaginateQueryAsync applies startIndex and
                 // count, and needs the full match count to report totalResults. Paging here as well
                 // reported the page size as the total, and ignored startIndex entirely.
-                return Task.FromResult(results.ToArray());
+                Resource[] results =
+                    matches.Select((UserEntity entity) => (Resource)ScimUserMapper.ToScim(entity)).ToArray();
+
+                return Task.FromResult(results);
             }
         }
 
@@ -266,7 +271,7 @@ namespace Microsoft.SCIM.WebHostSample.Provider
 
                 Core2EnterpriseUser user = resource as Core2EnterpriseUser;
 
-                if (string.IsNullOrWhiteSpace(user.UserName))
+                if (string.IsNullOrWhiteSpace(user?.UserName))
                 {
                     throw new HttpResponseException(HttpStatusCode.BadRequest);
                 }
@@ -274,31 +279,29 @@ namespace Microsoft.SCIM.WebHostSample.Provider
                 if
                 (
                     this.storage.Users.Values.Any(
-                        (Core2EnterpriseUser exisitingUser) =>
-                            string.Equals(exisitingUser.UserName, user.UserName, StringComparison.Ordinal) &&
-                            !string.Equals(exisitingUser.Identifier, user.Identifier, StringComparison.OrdinalIgnoreCase))
+                        (UserEntity existing) =>
+                            string.Equals(existing.UserName, user.UserName, StringComparison.Ordinal) &&
+                            !string.Equals(existing.Id, user.Identifier, StringComparison.OrdinalIgnoreCase))
                 )
                 {
                     throw new HttpResponseException(HttpStatusCode.Conflict);
                 }
 
-                Core2EnterpriseUser exisitingUser = this.storage.Users.Values
-                    .FirstOrDefault(
-                        (Core2EnterpriseUser exisitingUser) =>
-                            string.Equals(exisitingUser.Identifier, user.Identifier, StringComparison.OrdinalIgnoreCase)
-                    );
-                if (exisitingUser == null)
+                if (!this.storage.Users.TryGetValue(user.Identifier, out UserEntity stored))
                 {
                     throw new HttpResponseException(HttpStatusCode.NotFound);
                 }
 
-                // Update metadata
-                user.Metadata.Created = exisitingUser.Metadata.Created;
-                user.Metadata.LastModified = DateTime.UtcNow;
+                // RFC 7644 3.5.1: a replace, so the entity is built from the request alone and
+                // an attribute the body omits is cleared. Only what the store owns survives.
+                UserEntity replacement = ScimUserMapper.ToEntity(user);
+                replacement.Id = stored.Id;
+                replacement.CreatedUtc = stored.CreatedUtc;
+                replacement.LastModifiedUtc = DateTime.UtcNow;
 
-                this.storage.Users[user.Identifier] = user;
-                Resource result = user as Resource;
-                return Task.FromResult(result);
+                this.storage.Users[replacement.Id] = replacement;
+
+                return Task.FromResult<Resource>(ScimUserMapper.ToScim(replacement));
             }
         }
 
@@ -321,16 +324,11 @@ namespace Microsoft.SCIM.WebHostSample.Provider
                     throw new ArgumentNullException(nameof(parameters));
                 }
 
-                Resource result = null;
                 string identifier = parameters.ResourceIdentifier.Identifier;
 
-                if (this.storage.Users.ContainsKey(identifier))
+                if (this.storage.Users.TryGetValue(identifier, out UserEntity entity))
                 {
-                    if (this.storage.Users.TryGetValue(identifier, out Core2EnterpriseUser user))
-                    {
-                        result = user as Resource;
-                        return Task.FromResult(result);
-                    }
+                    return Task.FromResult<Resource>(ScimUserMapper.ToScim(entity));
                 }
 
                 throw new HttpResponseException(HttpStatusCode.NotFound);
@@ -370,20 +368,24 @@ namespace Microsoft.SCIM.WebHostSample.Provider
                     throw new NotSupportedException(unsupportedPatchTypeName);
                 }
 
-                if (this.storage.Users.TryGetValue(patch.ResourceIdentifier.Identifier, out Core2EnterpriseUser user))
-                {
-                    // RFC 7644 section 3.5.2: all of the operations, or none. See the matching
-                    // comment in InMemoryGroupProvider.UpdateAsync.
-                    Core2EnterpriseUser candidate = ResourceCloner.Clone(user);
-                    candidate.Apply(patchRequest);
-                    candidate.Metadata.LastModified = DateTime.UtcNow;
-
-                    this.storage.Users[patch.ResourceIdentifier.Identifier] = candidate;
-                }
-                else
+                if (!this.storage.Users.TryGetValue(patch.ResourceIdentifier.Identifier, out UserEntity stored))
                 {
                     throw new HttpResponseException(HttpStatusCode.NotFound);
                 }
+
+                // A PATCH is expressed against the resource, so the stored row is projected back
+                // into one, patched, and mapped in again. RFC 7644 3.5.2 wants all of the
+                // operations or none: the projection is a separate object, so a failure part-way
+                // through throws before the assignment below and the stored row is untouched.
+                Core2EnterpriseUser candidate = ScimUserMapper.ToScim(stored);
+                candidate.Apply(patchRequest);
+
+                UserEntity patched = ScimUserMapper.ToEntity(candidate);
+                patched.Id = stored.Id;
+                patched.CreatedUtc = stored.CreatedUtc;
+                patched.LastModifiedUtc = DateTime.UtcNow;
+
+                this.storage.Users[patched.Id] = patched;
 
                 return Task.CompletedTask;
             }
