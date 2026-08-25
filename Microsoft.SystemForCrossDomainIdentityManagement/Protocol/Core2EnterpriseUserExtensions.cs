@@ -161,6 +161,16 @@ namespace Microsoft.SCIM
                     break;
 
                 case AttributeNames.ElectronicMailAddresses:
+                    // A path naming the collection with no value path is a whole-collection
+                    // operation, which the per-address patcher declines: it needs a value
+                    // path to know which address to touch. Without this a full sync of
+                    // emails answered 204 and left the old addresses in place.
+                    if (null == operation.Path.ValuePath)
+                    {
+                        Core2EnterpriseUserExtensions.PatchElectronicMailAddressCollection(user, operation);
+                        break;
+                    }
+
                     user.PatchElectronicMailAddresses(operation);
                     break;
 
@@ -409,159 +419,62 @@ namespace Microsoft.SCIM
                 return;
             }
 
-            Address address;
-            Address addressExisting;
-            if (user.Addresses != null)
-            {
-                addressExisting =
-                    address =
-                        user
-                        .Addresses
-                        .SingleOrDefault(
-                            (Address item) =>
-                                string.Equals(subAttribute.ComparisonValue, item.ItemType, StringComparison.Ordinal));
-            }
-            else
-            {
-                addressExisting = null;
-                address =
-                    new Address()
+            Address addressExisting =
+                user
+                .Addresses?
+                .SingleOrDefault(
+                    (Address item) =>
+                        string.Equals(subAttribute.ComparisonValue, item.ItemType, StringComparison.Ordinal));
+
+            // A user holding a work address still has no home one, and the value path names
+            // the address to create. Reading the missing entry as though it existed
+            // dereferenced null.
+            Address address =
+                addressExisting
+                ?? new Address()
                     {
                         ItemType = subAttribute.ComparisonValue
                     };
-            }
 
-            string value;
-            if (string.Equals(Address.Work, subAttribute.ComparisonValue, StringComparison.Ordinal))
+            // One pass over the sub-attributes rather than a copy of the same eight lines
+            // per attribute per address type. The duplicated version reached only country,
+            // locality, postalCode, region and streetAddress on a work address and
+            // formatted on an "other" one, so the same PATCH answered 204 and did nothing
+            // depending on which type the value path named.
+            string requested = operation.Value?.FirstOrDefault()?.Value;
+            string subAttributePath = operation.Path.ValuePath.AttributePath;
+
+            if (Core2EnterpriseUserExtensions.Matches(subAttributePath, Microsoft.SCIM.AttributeNames.Country))
             {
-                if
-                (
-                    string.Equals(
-                        Microsoft.SCIM.AttributeNames.Country,
-                        operation.Path.ValuePath.AttributePath,
-                        StringComparison.Ordinal)
-                )
-                {
-                    value = operation.Value?.FirstOrDefault()?.Value;
-                    if
-                    (
-                            value != null
-                        && OperationName.Remove == operation.Name
-                        && string.Equals(value, address.Country, StringComparison.OrdinalIgnoreCase)
-                    )
-                    {
-                        value = null;
-                    }
-                    address.Country = value;
-                }
-
-                if
-                (
-                    string.Equals(
-                        Microsoft.SCIM.AttributeNames.Locality,
-                        operation.Path.ValuePath.AttributePath,
-                        StringComparison.Ordinal)
-                )
-                {
-                    value = operation.Value?.FirstOrDefault()?.Value;
-                    if
-                    (
-                            value != null
-                        && OperationName.Remove == operation.Name
-                        && string.Equals(value, address.Locality, StringComparison.OrdinalIgnoreCase)
-                    )
-                    {
-                        value = null;
-                    }
-                    address.Locality = value;
-                }
-
-                if
-                (
-                    string.Equals(
-                        Microsoft.SCIM.AttributeNames.PostalCode,
-                        operation.Path.ValuePath.AttributePath,
-                        StringComparison.Ordinal)
-                )
-                {
-                    value = operation.Value?.FirstOrDefault()?.Value;
-                    if
-                    (
-                            value != null
-                        && OperationName.Remove == operation.Name
-                        && string.Equals(value, address.PostalCode, StringComparison.OrdinalIgnoreCase)
-                    )
-                    {
-                        value = null;
-                    }
-                    address.PostalCode = value;
-                }
-
-                if
-                (
-                    string.Equals(
-                        Microsoft.SCIM.AttributeNames.Region,
-                        operation.Path.ValuePath.AttributePath,
-                        StringComparison.Ordinal)
-                )
-                {
-                    value = operation.Value?.FirstOrDefault()?.Value;
-                    if
-                    (
-                            value != null
-                        && OperationName.Remove == operation.Name
-                        && string.Equals(value, address.Region, StringComparison.OrdinalIgnoreCase)
-                    )
-                    {
-                        value = null;
-                    }
-                    address.Region = value;
-                }
-
-                if
-                (
-                    string.Equals(
-                        Microsoft.SCIM.AttributeNames.StreetAddress,
-                        operation.Path.ValuePath.AttributePath,
-                        StringComparison.Ordinal)
-                )
-                {
-                    value = operation.Value?.FirstOrDefault()?.Value;
-                    if
-                    (
-                            value != null
-                        && OperationName.Remove == operation.Name
-                        && string.Equals(value, address.StreetAddress, StringComparison.OrdinalIgnoreCase)
-                    )
-                    {
-                        value = null;
-                    }
-                    address.StreetAddress = value;
-                }
+                address.Country = Core2EnterpriseUserExtensions.ResolveValue(operation, requested, address.Country);
             }
-
-            if (string.Equals(Address.Other, subAttribute.ComparisonValue, StringComparison.Ordinal))
+            else if (Core2EnterpriseUserExtensions.Matches(subAttributePath, Microsoft.SCIM.AttributeNames.Locality))
             {
-                if
-                (
-                    string.Equals(
-                        Microsoft.SCIM.AttributeNames.Formatted,
-                        operation.Path.ValuePath.AttributePath,
-                        StringComparison.Ordinal)
-                )
-                {
-                    value = operation.Value?.FirstOrDefault()?.Value;
-                    if
-                    (
-                            value != null
-                        && OperationName.Remove == operation.Name
-                        && string.Equals(value, address.Formatted, StringComparison.OrdinalIgnoreCase)
-                    )
-                    {
-                        value = null;
-                    }
-                    address.Formatted = value;
-                }
+                address.Locality = Core2EnterpriseUserExtensions.ResolveValue(operation, requested, address.Locality);
+            }
+            else if (Core2EnterpriseUserExtensions.Matches(subAttributePath, Microsoft.SCIM.AttributeNames.PostalCode))
+            {
+                address.PostalCode = Core2EnterpriseUserExtensions.ResolveValue(operation, requested, address.PostalCode);
+            }
+            else if (Core2EnterpriseUserExtensions.Matches(subAttributePath, Microsoft.SCIM.AttributeNames.Region))
+            {
+                address.Region = Core2EnterpriseUserExtensions.ResolveValue(operation, requested, address.Region);
+            }
+            else if (Core2EnterpriseUserExtensions.Matches(subAttributePath, Microsoft.SCIM.AttributeNames.StreetAddress))
+            {
+                address.StreetAddress = Core2EnterpriseUserExtensions.ResolveValue(operation, requested, address.StreetAddress);
+            }
+            else if (Core2EnterpriseUserExtensions.Matches(subAttributePath, Microsoft.SCIM.AttributeNames.Formatted))
+            {
+                address.Formatted = Core2EnterpriseUserExtensions.ResolveValue(operation, requested, address.Formatted);
+            }
+            else
+            {
+                throw new ArgumentException(
+                    string.Format(
+                        CultureInfo.InvariantCulture,
+                        SystemForCrossDomainIdentityManagementProtocolResources.ExceptionInvalidPathTemplate,
+                        operation.Path));
             }
 
             if
@@ -755,6 +668,16 @@ namespace Microsoft.SCIM
                 case AttributeNames.Organization:
                     Core2EnterpriseUserExtensions.PatchOrganization(extension, operation);
                     break;
+
+                default:
+                    // As the core switch does for a core attribute: a path naming nothing the
+                    // extension defines is the client's mistake. Falling through answered 204
+                    // and changed nothing, which a client reads as the write having landed.
+                    throw new ArgumentException(
+                        string.Format(
+                            CultureInfo.InvariantCulture,
+                            SystemForCrossDomainIdentityManagementProtocolResources.ExceptionInvalidPathTemplate,
+                            operation.Path));
             }
         }
 
@@ -848,50 +771,50 @@ namespace Microsoft.SCIM
                 name = new Name();
             }
 
-            string value;
-            if
-            (
-                string.Equals(
-                    Microsoft.SCIM.AttributeNames.GivenName,
-                    operation.Path.ValuePath.AttributePath,
-                    StringComparison.OrdinalIgnoreCase)
-            )
+            string subAttribute = operation.Path.ValuePath.AttributePath;
+            string requested = operation.Value?.FirstOrDefault()?.Value;
+
+            // Only givenName and familyName were handled; a PATCH naming any other
+            // sub-attribute answered 204 and changed nothing, which a client cannot tell
+            // from success. The five the Name type models are applied here, and anything
+            // else is refused by name rather than silently dropped.
+            if (Core2EnterpriseUserExtensions.Matches(subAttribute, Microsoft.SCIM.AttributeNames.GivenName))
             {
-                value = operation.Value?.FirstOrDefault()?.Value;
-                if
-                (
-                        value != null
-                    && OperationName.Remove == operation.Name
-                    && string.Equals(value, name.GivenName, StringComparison.OrdinalIgnoreCase)
-                )
-                {
-                    value = null;
-                }
-                name.GivenName = value;
+                name.GivenName = Core2EnterpriseUserExtensions.ResolveValue(operation, requested, name.GivenName);
+            }
+            else if (Core2EnterpriseUserExtensions.Matches(subAttribute, Microsoft.SCIM.AttributeNames.FamilyName))
+            {
+                name.FamilyName = Core2EnterpriseUserExtensions.ResolveValue(operation, requested, name.FamilyName);
+            }
+            else if (Core2EnterpriseUserExtensions.Matches(subAttribute, Microsoft.SCIM.AttributeNames.Formatted))
+            {
+                name.Formatted = Core2EnterpriseUserExtensions.ResolveValue(operation, requested, name.Formatted);
+            }
+            else if (Core2EnterpriseUserExtensions.Matches(subAttribute, Microsoft.SCIM.AttributeNames.HonorificPrefix))
+            {
+                name.HonorificPrefix = Core2EnterpriseUserExtensions.ResolveValue(operation, requested, name.HonorificPrefix);
+            }
+            else if (Core2EnterpriseUserExtensions.Matches(subAttribute, Microsoft.SCIM.AttributeNames.HonorificSuffix))
+            {
+                name.HonorificSuffix = Core2EnterpriseUserExtensions.ResolveValue(operation, requested, name.HonorificSuffix);
+            }
+            else
+            {
+                throw new ArgumentException(
+                    string.Format(
+                        CultureInfo.InvariantCulture,
+                        SystemForCrossDomainIdentityManagementProtocolResources.ExceptionInvalidPathTemplate,
+                        operation.Path));
             }
 
-            if
-            (
-                string.Equals(
-                    Microsoft.SCIM.AttributeNames.FamilyName,
-                    operation.Path.ValuePath.AttributePath,
-                    StringComparison.OrdinalIgnoreCase)
-            )
-            {
-                value = operation.Value?.FirstOrDefault()?.Value;
-                if
-                (
-                        value != null
-                    && OperationName.Remove == operation.Name
-                    && string.Equals(value, name.FamilyName, StringComparison.OrdinalIgnoreCase)
-                )
-                {
-                    value = null;
-                }
-                name.FamilyName = value;
-            }
+            bool empty =
+                string.IsNullOrWhiteSpace(name.FamilyName)
+                && string.IsNullOrWhiteSpace(name.GivenName)
+                && string.IsNullOrWhiteSpace(name.Formatted)
+                && string.IsNullOrWhiteSpace(name.HonorificPrefix)
+                && string.IsNullOrWhiteSpace(name.HonorificSuffix);
 
-            if (string.IsNullOrWhiteSpace(name.FamilyName) && string.IsNullOrWhiteSpace(name.GivenName))
+            if (empty)
             {
                 if (nameExisting != null)
                 {
@@ -907,6 +830,109 @@ namespace Microsoft.SCIM
             }
 
             user.Name = name;
+        }
+
+        /// <summary>
+        /// Applies an operation naming <c>emails</c> as a whole rather than one address.
+        /// </summary>
+        /// <remarks>
+        /// The shape a full sync takes: replace hands over the complete set, add appends to
+        /// it, and remove with no value clears it. The same three cases the group members
+        /// patcher already answers.
+        /// </remarks>
+        private static void PatchElectronicMailAddressCollection(
+            Core2EnterpriseUser user,
+            PatchOperation2 operation)
+        {
+            if (OperationName.Remove == operation.Name
+                && (null == operation.Value || !operation.Value.Any()))
+            {
+                user.ElectronicMailAddresses = null;
+                return;
+            }
+
+            if (null == operation.Value || !operation.Value.Any())
+            {
+                return;
+            }
+
+            ElectronicMailAddress[] supplied =
+                operation
+                .Value
+                .Where(
+                    (OperationValue item) =>
+                        !string.IsNullOrWhiteSpace(item.Value))
+                .Select(
+                    (OperationValue item) =>
+                        new ElectronicMailAddress()
+                        {
+                            Value = item.Value
+                        })
+                .ToArray();
+
+            switch (operation.Name)
+            {
+                case OperationName.Replace:
+                    user.ElectronicMailAddresses = supplied;
+                    break;
+
+                case OperationName.Add:
+                    user.ElectronicMailAddresses =
+                        null == user.ElectronicMailAddresses
+                            ? supplied
+                            : user.ElectronicMailAddresses.Concat(supplied).ToArray();
+                    break;
+
+                case OperationName.Remove:
+                    if (null == user.ElectronicMailAddresses)
+                    {
+                        break;
+                    }
+
+                    user.ElectronicMailAddresses =
+                        user
+                        .ElectronicMailAddresses
+                        .Where(
+                            (ElectronicMailAddress item) =>
+                                !supplied.Any(
+                                    (ElectronicMailAddress removed) =>
+                                        string.Equals(
+                                            removed.Value,
+                                            item.Value,
+                                            StringComparison.OrdinalIgnoreCase)))
+                        .ToArray();
+                    break;
+            }
+        }
+
+        private static bool Matches(string candidate, string attributeName)
+        {
+            return string.Equals(candidate, attributeName, StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// The value an operation leaves a singular sub-attribute holding.
+        /// </summary>
+        /// <remarks>
+        /// A remove clears the attribute when it names the value being held, or names no
+        /// value at all. Naming a different value removes nothing - the attribute keeps
+        /// what it had. This used to assign the requested value on that path, so a remove
+        /// of a value the resource did not hold *wrote* that value: the operation performed
+        /// an add. RFC 7644 section 3.5.2.2.
+        /// </remarks>
+        private static string ResolveValue(PatchOperation2 operation, string requested, string existing)
+        {
+            if (OperationName.Remove != operation.Name)
+            {
+                return requested;
+            }
+
+            if (null == requested || string.Equals(requested, existing, StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            return existing;
         }
 
         private static void PatchOrganization(ExtensionAttributeEnterpriseUser2 extension, PatchOperation2 operation)
@@ -979,13 +1005,11 @@ namespace Microsoft.SCIM
                     (InstantMessaging item) =>
                         string.Equals(subAttribute.ComparisonValue, item.ItemType, StringComparison.Ordinal));
 
-            string value = operation.Value?.FirstOrDefault()?.Value;
-            if (null != value
-                && OperationName.Remove == operation.Name
-                && string.Equals(value, existing?.Value, StringComparison.OrdinalIgnoreCase))
-            {
-                value = null;
-            }
+            string value =
+                Core2EnterpriseUserExtensions.ResolveValue(
+                    operation,
+                    operation.Value?.FirstOrDefault()?.Value,
+                    existing?.Value);
 
             if (string.IsNullOrWhiteSpace(value))
             {
@@ -1094,39 +1118,28 @@ namespace Microsoft.SCIM
                 return;
             }
 
-            PhoneNumber phoneNumber;
-            PhoneNumber phoneNumberExisting;
-            if (user.PhoneNumbers != null)
-            {
-                phoneNumberExisting =
-                    phoneNumber =
-                        user
-                        .PhoneNumbers
-                        .SingleOrDefault(
-                            (PhoneNumber item) =>
-                                string.Equals(subAttribute.ComparisonValue, item.ItemType, StringComparison.Ordinal));
-            }
-            else
-            {
-                phoneNumberExisting = null;
-                phoneNumber =
-                    new PhoneNumber()
+            PhoneNumber phoneNumberExisting =
+                user
+                .PhoneNumbers?
+                .SingleOrDefault(
+                    (PhoneNumber item) =>
+                        string.Equals(subAttribute.ComparisonValue, item.ItemType, StringComparison.Ordinal));
+
+            // A user who already holds a number of another type still has no entry of this
+            // one, and the value path names the entry to create. Reading the missing entry
+            // as though it existed dereferenced null.
+            PhoneNumber phoneNumber =
+                phoneNumberExisting
+                ?? new PhoneNumber()
                     {
                         ItemType = subAttribute.ComparisonValue
                     };
-            }
 
-            string value = operation.Value?.FirstOrDefault()?.Value;
-            if
-            (
-                    value != null
-                && OperationName.Remove == operation.Name
-                && string.Equals(value, phoneNumber.Value, StringComparison.OrdinalIgnoreCase)
-            )
-            {
-                value = null;
-            }
-            phoneNumber.Value = value;
+            phoneNumber.Value =
+                Core2EnterpriseUserExtensions.ResolveValue(
+                    operation,
+                    operation.Value?.FirstOrDefault()?.Value,
+                    phoneNumber.Value);
 
             if (string.IsNullOrWhiteSpace(phoneNumber.Value))
             {

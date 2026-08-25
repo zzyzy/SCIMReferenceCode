@@ -1037,6 +1037,31 @@ namespace Microsoft.SCIM
             return result;
         }
 
+        /// <summary>
+        /// The value an operation leaves a single-valued sub-attribute holding.
+        /// </summary>
+        /// <remarks>
+        /// A remove clears the attribute when it names the value being held, or names no
+        /// value at all. Naming a different value removes nothing - the attribute keeps
+        /// what it had. Assigning the requested value on that path meant a remove of a
+        /// value the resource did not hold *wrote* that value: the operation performed an
+        /// add. RFC 7644 section 3.5.2.2.
+        /// </remarks>
+        private static string ResolveValue(PatchOperation2 operation, string requested, string existing)
+        {
+            if (OperationName.Remove != operation.Name)
+            {
+                return requested;
+            }
+
+            if (null == requested || string.Equals(requested, existing, StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            return existing;
+        }
+
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Maintainability", "CA1502:AvoidExcessiveComplexity", Justification = "None")]
         internal static IEnumerable<ElectronicMailAddress> PatchElectronicMailAddresses(
             IEnumerable<ElectronicMailAddress> electronicMailAddresses,
@@ -1110,38 +1135,27 @@ namespace Microsoft.SCIM
                 return electronicMailAddresses;
             }
 
-            ElectronicMailAddress electronicMailAddress;
-            ElectronicMailAddress electronicMailAddressExisting;
-            if (electronicMailAddresses != null)
-            {
-                electronicMailAddressExisting =
-                    electronicMailAddress =
-                        electronicMailAddresses
-                        .SingleOrDefault(
-                            (ElectronicMailAddress item) =>
-                                string.Equals(subAttribute.ComparisonValue, item.ItemType, StringComparison.Ordinal));
-            }
-            else
-            {
-                electronicMailAddressExisting = null;
-                electronicMailAddress =
-                    new ElectronicMailAddress()
+            ElectronicMailAddress electronicMailAddressExisting =
+                electronicMailAddresses?
+                .SingleOrDefault(
+                    (ElectronicMailAddress item) =>
+                        string.Equals(subAttribute.ComparisonValue, item.ItemType, StringComparison.Ordinal));
+
+            // A user holding a work address still has no home one, and the value path names
+            // the address to create. Reading the missing entry as though it existed
+            // dereferenced null on the very next line.
+            ElectronicMailAddress electronicMailAddress =
+                electronicMailAddressExisting
+                ?? new ElectronicMailAddress()
                     {
                         ItemType = electronicMailAddressType
                     };
-            }
 
-            string value = operation.Value?.FirstOrDefault()?.Value;
-            if
-            (
-                    value != null
-                && OperationName.Remove == operation.Name
-                && string.Equals(value, electronicMailAddress.Value, StringComparison.OrdinalIgnoreCase)
-            )
-            {
-                value = null;
-            }
-            electronicMailAddress.Value = value;
+            electronicMailAddress.Value =
+                ProtocolExtensions.ResolveValue(
+                    operation,
+                    operation.Value?.FirstOrDefault()?.Value,
+                    electronicMailAddress.Value);
 
             IEnumerable<ElectronicMailAddress> result;
             if (string.IsNullOrWhiteSpace(electronicMailAddress.Value))
@@ -1177,7 +1191,10 @@ namespace Microsoft.SCIM
                 return result;
             }
 
-            result = electronicMailAddresses.Union(electronicMailAddresses).ToArray();
+            // Union with `result`, not with itself: unioning the existing collection with
+            // the existing collection returned it unchanged, so adding an address of a type
+            // the user did not yet hold silently did nothing.
+            result = electronicMailAddresses.Union(result).ToArray();
             return result;
         }
 
@@ -1301,38 +1318,28 @@ namespace Microsoft.SCIM
                 return roles;
             }
 
-            Role role;
-            Role roleExisting;
-            if (roles != null)
-            {
-                roleExisting =
-                    role =
-                        roles
-                        .SingleOrDefault(
-                            (Role item) =>
-                                string.Equals(subAttribute.ComparisonValue, item.ItemType, StringComparison.Ordinal));
-            }
-            else
-            {
-                roleExisting = null;
-                role =
-                    new Role()
+            Role roleExisting =
+                roles?
+                .SingleOrDefault(
+                    (Role item) =>
+                        string.Equals(subAttribute.ComparisonValue, item.ItemType, StringComparison.Ordinal));
+
+            // ItemType carries the type the value path named. Leaving it unset meant a role
+            // added this way could never be found by the same path again, and reading the
+            // missing entry as though it existed dereferenced null.
+            Role role =
+                roleExisting
+                ?? new Role()
                     {
+                        ItemType = subAttribute.ComparisonValue,
                         Primary = true
                     };
-            }
 
-            string value = operation.Value?.FirstOrDefault()?.Value;
-            if
-            (
-                    value != null
-                && OperationName.Remove == operation.Name
-                && string.Equals(value, role.Value, StringComparison.OrdinalIgnoreCase)
-            )
-            {
-                value = null;
-            }
-            role.Value = value;
+            role.Value =
+                ProtocolExtensions.ResolveValue(
+                    operation,
+                    operation.Value?.FirstOrDefault()?.Value,
+                    role.Value);
 
             IEnumerable<Role> result;
             if (string.IsNullOrWhiteSpace(role.Value))
@@ -1369,7 +1376,10 @@ namespace Microsoft.SCIM
                 return result;
             }
 
-            result = roles.Union(roles).ToArray();
+            // Union with `result`, not with itself: unioning the existing roles with the
+            // existing roles returned them unchanged, so adding a role of a type the user
+            // did not yet hold silently did nothing.
+            result = roles.Union(result).ToArray();
             return result;
         }
 
