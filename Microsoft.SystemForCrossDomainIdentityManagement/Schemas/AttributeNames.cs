@@ -47,6 +47,7 @@ namespace Microsoft.SCIM
         public const string Ims = "ims";
         public const string IsDeleted = "isDeleted";
         public const string LastModified = "lastModified";
+        public const string MiddleName = "middleName";
         public const string Locale = "locale";
         public const string Locality = "locality";
         public const string Location = "location";

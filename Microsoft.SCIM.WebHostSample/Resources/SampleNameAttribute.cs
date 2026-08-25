@@ -40,6 +40,18 @@ namespace Microsoft.SCIM.WebHostSample.Resources
             }
         }
 
+        public static AttributeScheme MiddleNameAttributeScheme
+        {
+            get
+            {
+                AttributeScheme middleNameScheme = new AttributeScheme("middleName", AttributeDataType.@string, false)
+                {
+                    Description = SampleConstants.DescriptionMiddleName
+                };
+                return middleNameScheme;
+            }
+        }
+
         public static AttributeScheme HonorificPrefixAttributeScheme
         {
             get

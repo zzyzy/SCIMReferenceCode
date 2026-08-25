@@ -29,6 +29,7 @@ namespace Microsoft.SCIM.WebHostSample.Resources
                 nameScheme.AddSubAttribute(SampleNameAttribute.FormattedNameAttributeScheme);
                 nameScheme.AddSubAttribute(SampleNameAttribute.GivenNameAttributeScheme);
                 nameScheme.AddSubAttribute(SampleNameAttribute.FamilyNameAttributeScheme);
+                nameScheme.AddSubAttribute(SampleNameAttribute.MiddleNameAttributeScheme);
                 nameScheme.AddSubAttribute(SampleNameAttribute.HonorificPrefixAttributeScheme);
                 nameScheme.AddSubAttribute(SampleNameAttribute.HonorificSuffixAttributeScheme);
 

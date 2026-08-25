@@ -12,17 +12,21 @@ namespace Microsoft.SCIM
     using NewtonsoftSerializer = Newtonsoft.Json.JsonSerializer;
 
     /// <summary>
-    /// Makes the untyped schema extensions of <see cref="Core2UserBase.CustomExtension"/>
-    /// round-trip over HTTP.
+    /// Makes the untyped schema extensions of an <see cref="IExtensibleResource"/> - a user
+    /// or a group - round-trip over HTTP.
     /// </summary>
     /// <remarks>
     /// Without this, <c>CustomExtension</c> is unreachable from the wire in both directions.
-    /// Outbound, the only code that emits it is <c>Core2UserBase.ToJson()</c>, which nothing in
-    /// either hosting leg calls - responses are serialized straight off the object by Newtonsoft,
+    /// Outbound, the only code that emits it is <c>ToJson()</c>, which nothing in either
+    /// hosting leg calls - responses are serialized straight off the object by Newtonsoft,
     /// which reads <c>[DataMember]</c> and never consults <see cref="IJsonSerializable"/>.
     /// Inbound, the only code that fills it is
     /// <c>Core2EnterpriseUserJsonDeserializingFactory</c>, which the hosts also bypass because
     /// MVC model binding produces the typed body instead.
+    ///
+    /// It matches on <see cref="IExtensibleResource"/> rather than on the user type: groups
+    /// hold extensions the same way, and matching the user alone dropped every extension a
+    /// client sent on a group while accepting the request.
     ///
     /// This converter closes both halves at the one place both legs share - the Newtonsoft
     /// settings - so an extension namespace the service was never compiled against still
@@ -43,7 +47,7 @@ namespace Microsoft.SCIM
     {
         public override bool CanConvert(Type objectType)
         {
-            return null != objectType && typeof(Core2UserBase).IsAssignableFrom(objectType);
+            return null != objectType && typeof(IExtensibleResource).IsAssignableFrom(objectType);
         }
 
         public override void WriteJson(JsonWriter writer, object value, NewtonsoftSerializer serializer)
@@ -59,13 +63,13 @@ namespace Microsoft.SCIM
                 return;
             }
 
-            Core2UserBase user = (Core2UserBase)value;
+            IExtensibleResource resource = (IExtensibleResource)value;
 
             // Serialized by a serializer that does not carry this converter, so the default
             // contract runs and there is no recursion.
             JObject json = JObject.FromObject(value, SchematizedJsonConverter.WithoutSelf(serializer));
 
-            foreach (KeyValuePair<string, IDictionary<string, object>> entry in user.CustomExtension)
+            foreach (KeyValuePair<string, IDictionary<string, object>> entry in resource.CustomExtension)
             {
                 // A typed member for the same schema URI has already written it.
                 if (null != json.Property(entry.Key, StringComparison.OrdinalIgnoreCase))
@@ -105,9 +109,9 @@ namespace Microsoft.SCIM
 
             object result = json.ToObject(objectType, SchematizedJsonConverter.WithoutSelf(serializer));
 
-            if (result is Core2UserBase user)
+            if (result is IExtensibleResource resource)
             {
-                SchematizedJsonConverter.ReadCustomExtensions(json, objectType, user, serializer);
+                SchematizedJsonConverter.ReadCustomExtensions(json, objectType, resource, serializer);
             }
 
             return result;
@@ -116,7 +120,7 @@ namespace Microsoft.SCIM
         private static void ReadCustomExtensions(
             JObject json,
             Type objectType,
-            Core2UserBase user,
+            IExtensibleResource resource,
             NewtonsoftSerializer serializer)
         {
             // The names the default contract already bound, so a typed extension member is not
@@ -151,7 +155,7 @@ namespace Microsoft.SCIM
                 // AddCustomAttribute itself rejects anything that is not an extension URI, and
                 // skips the enterprise extension - which is a typed member on
                 // Core2EnterpriseUserBase - so it is not defeated by being handed one.
-                user.AddCustomAttribute(
+                resource.AddCustomAttribute(
                     property.Name,
                     SchematizedJsonConverter.ToDictionary(nested));
             }
@@ -199,7 +203,7 @@ namespace Microsoft.SCIM
 
         /// <summary>
         /// Converts a parsed extension object into the shape
-        /// <see cref="Core2UserBase.AddCustomAttribute"/> accepts, which is a concrete
+        /// <see cref="IExtensibleResource.AddCustomAttribute"/> accepts, which is a concrete
         /// <see cref="Dictionary{TKey, TValue}"/> and nothing else.
         /// </summary>
         private static Dictionary<string, object> ToDictionary(JObject json)

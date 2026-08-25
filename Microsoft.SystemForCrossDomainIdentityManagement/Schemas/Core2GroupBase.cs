@@ -10,7 +10,7 @@ namespace Microsoft.SCIM
     using System.Runtime.Serialization;
 
     [DataContract]
-    public abstract class Core2GroupBase : GroupBase
+    public abstract class Core2GroupBase : GroupBase, IExtensibleResource
     {
         private IDictionary<string, IDictionary<string, object>> customExtension;
 

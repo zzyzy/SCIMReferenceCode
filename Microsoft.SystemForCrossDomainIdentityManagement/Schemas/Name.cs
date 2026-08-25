@@ -30,6 +30,13 @@ namespace Microsoft.SCIM
             set;
         }
 
+        [DataMember(Name = AttributeNames.MiddleName, Order = 1, IsRequired = false, EmitDefaultValue = false)]
+        public string MiddleName
+        {
+            get;
+            set;
+        }
+
         [DataMember(Name = AttributeNames.HonorificPrefix, Order = 1, IsRequired = false, EmitDefaultValue = false)]
         public string HonorificPrefix
         {

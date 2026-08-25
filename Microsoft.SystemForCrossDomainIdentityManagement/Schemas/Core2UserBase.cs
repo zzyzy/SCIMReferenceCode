@@ -10,7 +10,7 @@ namespace Microsoft.SCIM
     using System.Runtime.Serialization;
 
     [DataContract]
-    public abstract class Core2UserBase : UserBase
+    public abstract class Core2UserBase : UserBase, IExtensibleResource
     {
         private IDictionary<string, IDictionary<string, object>> customExtension;
 

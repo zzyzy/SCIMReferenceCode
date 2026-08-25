@@ -63,6 +63,8 @@ namespace Microsoft.SCIM.WebHostSample.Resources
             " This attribute MAY contain newlines.";
         public const string DescriptionFamilyName = "The family name of the User, or last name in most Western languages(e.g., 'Jensen' given the full " +
             "name 'Ms. Barbara J Jensen, III').";
+        public const string DescriptionMiddleName = "The middle name(s) of the User (e.g., 'Jane' given the full " +
+            "name 'Ms. Barbara J Jensen, III').";
         public const string DescriptionHonorificPrefix = "The honorific prefix(es) of the User, or title in most Western languages(e.g., 'Ms.' " +
             "given the full name 'Ms. Barbara J Jensen, III').";
         public const string DescriptionHonorificSuffix = "The honorific suffix(es) of the User, or suffix in most Western languages(e.g., 'III' " +

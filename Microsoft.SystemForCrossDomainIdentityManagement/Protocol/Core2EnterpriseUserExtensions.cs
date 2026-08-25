@@ -774,10 +774,10 @@ namespace Microsoft.SCIM
             string subAttribute = operation.Path.ValuePath.AttributePath;
             string requested = operation.Value?.FirstOrDefault()?.Value;
 
-            // Only givenName and familyName were handled; a PATCH naming any other
-            // sub-attribute answered 204 and changed nothing, which a client cannot tell
-            // from success. The five the Name type models are applied here, and anything
-            // else is refused by name rather than silently dropped.
+            // RFC 7643 section 4.1.1 defines six sub-attributes of name. Only givenName and
+            // familyName were handled; a PATCH naming any of the other four answered 204 and
+            // changed nothing, which a client cannot tell from success. Anything outside the
+            // six is refused by name rather than silently dropped.
             if (Core2EnterpriseUserExtensions.Matches(subAttribute, Microsoft.SCIM.AttributeNames.GivenName))
             {
                 name.GivenName = Core2EnterpriseUserExtensions.ResolveValue(operation, requested, name.GivenName);
@@ -789,6 +789,10 @@ namespace Microsoft.SCIM
             else if (Core2EnterpriseUserExtensions.Matches(subAttribute, Microsoft.SCIM.AttributeNames.Formatted))
             {
                 name.Formatted = Core2EnterpriseUserExtensions.ResolveValue(operation, requested, name.Formatted);
+            }
+            else if (Core2EnterpriseUserExtensions.Matches(subAttribute, Microsoft.SCIM.AttributeNames.MiddleName))
+            {
+                name.MiddleName = Core2EnterpriseUserExtensions.ResolveValue(operation, requested, name.MiddleName);
             }
             else if (Core2EnterpriseUserExtensions.Matches(subAttribute, Microsoft.SCIM.AttributeNames.HonorificPrefix))
             {
@@ -811,6 +815,7 @@ namespace Microsoft.SCIM
                 string.IsNullOrWhiteSpace(name.FamilyName)
                 && string.IsNullOrWhiteSpace(name.GivenName)
                 && string.IsNullOrWhiteSpace(name.Formatted)
+                && string.IsNullOrWhiteSpace(name.MiddleName)
                 && string.IsNullOrWhiteSpace(name.HonorificPrefix)
                 && string.IsNullOrWhiteSpace(name.HonorificSuffix);
 
