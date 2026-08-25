@@ -33,6 +33,10 @@ function eduUser(overrides: Record<string, unknown> = {}): Record<string, unknow
   return {
     schemas: [SCHEMA_USER, EXTENSION],
     userName,
+    // Edupass' identifier for the resource, per the specification's User schema. Every
+    // example in it carries one, and a relying party may legitimately require it - it is
+    // the only handle Edupass has on the resource besides the RP's own id.
+    externalId: unique("edupass-id"),
     active: true,
     name: { givenName: "Given", familyName: "Family" },
     emails: [{ value: userName, type: "WOG", primary: true }],
@@ -53,10 +57,24 @@ async function createEduUser(overrides: Record<string, unknown> = {}): Promise<S
   return response.body;
 }
 
+/**
+ * A group displayName in the format the specification mandates.
+ *
+ * "Application role in the format <location code>_<app code>_<role code>" - so an
+ * arbitrary name is not merely unconventional, it is not an application role at all, and
+ * a relying party is entitled to refuse it. The suite previously used unique("role"),
+ * which has no underscores; that passed only because the in-memory provider treats
+ * displayName as an opaque string.
+ */
+function eduRole(): string {
+  return unique("1001_app1_role");
+}
+
 async function createEduGroup(overrides: Record<string, unknown> = {}): Promise<ScimResource> {
   const response = await edupass<ScimResource>("POST", "/Groups", {
     schemas: [SCHEMA_GROUP],
-    displayName: unique("role"),
+    displayName: eduRole(),
+    externalId: unique("edupass-grp"),
     ...overrides,
   });
   if (response.status !== 201) {
@@ -473,7 +491,8 @@ describe("Edupass: the provider's obligations over users and groups", () => {
     // Stored and handed back to Edupass on the next read is the failure to avoid.
     const response = await edupass("POST", "/Groups", {
       schemas: [SCHEMA_GROUP],
-      displayName: unique("role"),
+      displayName: eduRole(),
+      externalId: unique("edupass-grp"),
       members: [{ value: "00000000-0000-0000-0000-000000000000" }],
     });
 
