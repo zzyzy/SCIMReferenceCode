@@ -162,3 +162,69 @@ describe("A provider that faults: what still works without it", () => {
     expect(response.status).toBe(405);
   });
 });
+
+describe("A provider that faults: the status it chose", () => {
+  // A provider is entitled to answer with a specific SCIM status - 403 for a caller
+  // the store will not serve, 501 for an operation it does not offer, 429 for one it
+  // is shedding. The handlers used to flatten those on three verbs: an item GET
+  // turned anything but 404 into 500, and POST and PUT turned anything but
+  // 404/409 into 400. The provider's answer never reached the client.
+  //
+  // FaultyProvider throws the status named in the request, so each verb can be asked
+  // the same question. Requests without a marker still fault the ordinary way.
+  const marker = (status: number): string => `status-${status}`;
+
+  it.each([403, 429, 501])("preserves %i from a create", async (status) => {
+    const response = await faulty("POST", "/Users", userBody({ userName: `${marker(status)}@x.sg` }));
+
+    expect(response.status).toBe(status);
+    expect(response.body.schemas).toContain(SCHEMA_ERROR);
+    expect(response.body.status).toBe(String(status));
+  });
+
+  it.each([403, 429, 501])("preserves %i from an item read", async (status) => {
+    const response = await faulty("GET", `/Users/${marker(status)}`);
+
+    expect(response.status).toBe(status);
+    expect(response.body.schemas).toContain(SCHEMA_ERROR);
+  });
+
+  it.each([403, 429, 501])("preserves %i from a replace", async (status) => {
+    const response = await faulty(
+      "PUT",
+      `/Users/${marker(status)}`,
+      userBody({ id: marker(status) }),
+    );
+
+    expect(response.status).toBe(status);
+    expect(response.body.schemas).toContain(SCHEMA_ERROR);
+  });
+
+  it.each([403, 429])("preserves %i from a delete", async (status) => {
+    const response = await faulty("DELETE", `/Users/${marker(status)}`);
+
+    expect(response.status).toBe(status);
+  });
+
+  it.each([403, 429])("preserves %i from a patch", async (status) => {
+    const response = await faulty("PATCH", `/Users/${marker(status)}`, {
+      schemas: [SCHEMA_PATCH],
+      Operations: [{ op: "replace", path: "title", value: "x" }],
+    });
+
+    expect(response.status).toBe(status);
+  });
+
+  it("preserves 403 from a collection query", async () => {
+    const response = await faulty("GET", `/Users?filter=${encodeURIComponent('userName eq "status-403"')}`);
+
+    expect(response.status).toBe(403);
+  });
+
+  it("still answers 500 when the provider faults for a reason it did not name", async () => {
+    // The point of the marker is that it is opt-in: an unmarked request has to keep
+    // producing the catch-all, or this change would have hidden every genuine fault.
+    expectScimServerError(await faulty("POST", "/Users", userBody()));
+    expectScimServerError(await faulty("GET", `/Users/${identifier}`));
+  });
+});

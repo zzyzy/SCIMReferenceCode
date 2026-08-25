@@ -201,6 +201,17 @@ namespace Microsoft.SCIM
                 count = 0;
             }
 
+            // RFC 7643 section 5 defines filter.maxResults as "the maximum number of
+            // resources returned in a response". The service advertises one and then
+            // returned the whole store, so a client that sized itself from the config
+            // got a page it never agreed to accept. The cap bounds the page only:
+            // totalResults still reports every match, so paging still terminates.
+            int maximumResults = this.Configuration?.Filtering?.MaximumResults ?? 0;
+            if (maximumResults > 0 && (!count.HasValue || count.Value > maximumResults))
+            {
+                count = maximumResults;
+            }
+
             IEnumerable<Resource> page = resources.Skip(startIndex - 1);
             if (count.HasValue)
             {

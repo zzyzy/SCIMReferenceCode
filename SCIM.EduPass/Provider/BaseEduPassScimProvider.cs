@@ -47,6 +47,11 @@ namespace Scim.EduPass
             this.requireUinFin = requireUinFin;
         }
 
+        /// <remarks>
+        /// User and Group both, because a relying party with Edupass-managed roles serves
+        /// both endpoints. Only the base's own User entry is dropped, so that a derived
+        /// provider adding resource types of its own keeps them.
+        /// </remarks>
         public override IReadOnlyCollection<Core2ResourceType> ResourceTypes
         {
             get
@@ -56,20 +61,44 @@ namespace Scim.EduPass
                     .ResourceTypes
                     .Where(
                         (Core2ResourceType item) =>
-                            !string.Equals(item.Identifier, Types.User, StringComparison.OrdinalIgnoreCase))
-                    .Concat(new[] { EduPassTypeSchemes.CreateUserResourceType() })
+                            !string.Equals(item.Identifier, Types.User, StringComparison.OrdinalIgnoreCase)
+                            && !string.Equals(item.Identifier, Types.Group, StringComparison.OrdinalIgnoreCase))
+                    .Concat(
+                        new[]
+                        {
+                            EduPassTypeSchemes.CreateUserResourceType(),
+                            EduPassTypeSchemes.CreateGroupResourceType(),
+                        })
                     .ToArray();
             }
         }
 
+        /// <remarks>
+        /// The two core schemas as well as the extension. Edupass reads <c>/Schemas</c> to
+        /// learn what the relying party supports, and a payload carrying only the extension
+        /// says the party supports no core attribute at all - not even userName, which the
+        /// same specification names as required.
+        /// </remarks>
         public override IReadOnlyCollection<TypeScheme> Schema
         {
             get
             {
+                string[] replaced =
+                    new[] { SchemaIdentifiers.Core2User, SchemaIdentifiers.Core2Group };
+
                 return
                     base
                     .Schema
-                    .Concat(new[] { EduPassTypeSchemes.CreateUserExtensionTypeScheme(this.requireUinFin) })
+                    .Where(
+                        (TypeScheme item) =>
+                            !replaced.Contains(item.Identifier, StringComparer.OrdinalIgnoreCase))
+                    .Concat(
+                        new[]
+                        {
+                            EduPassTypeSchemes.CreateUserTypeScheme(),
+                            EduPassTypeSchemes.CreateGroupTypeScheme(),
+                            EduPassTypeSchemes.CreateUserExtensionTypeScheme(this.requireUinFin),
+                        })
                     .ToArray();
             }
         }
@@ -101,8 +130,18 @@ namespace Scim.EduPass
                         }
 
                         BaseEduPassScimProvider.Stamp(user, user.Metadata);
+
+                        // groups is read-only and derived from Group membership, so whatever
+                        // the client sent is discarded rather than stored.
+                        user.Groups = null;
+
                         await store.AddUserAsync(user).ConfigureAwait(false);
-                        created = user;
+
+                        // Projected, because the specification requires groups on the Create
+                        // User response and because echoing the client's value back would
+                        // report a role the party does not hold. A new identity holds none,
+                        // so this is [] - which is the answer, not the absence of one.
+                        created = await BaseEduPassScimProvider.ProjectAsync(store, user).ConfigureAwait(false);
                         break;
 
                     case Core2Group group:
@@ -446,7 +485,11 @@ namespace Scim.EduPass
             IReadOnlyCollection<UserGroup> memberships =
                 await store.FindMembershipsAsync(user.Identifier).ConfigureAwait(false);
 
-            user.Groups = null != memberships && memberships.Count > 0 ? memberships.ToArray() : null;
+            // An empty array, not null. The specification's own Create User example carries
+            // "groups": [], and for a relying party with Edupass-managed roles an absent
+            // attribute is a different answer from "this identity holds no role yet".
+            user.Groups =
+                null != memberships ? memberships.ToArray() : Array.Empty<UserGroup>();
 
             return user;
         }
@@ -475,7 +518,7 @@ namespace Scim.EduPass
                     memberships.TryGetValue(user.Identifier, out held);
                 }
 
-                user.Groups = null != held && held.Count > 0 ? held.ToArray() : null;
+                user.Groups = null != held ? held.ToArray() : Array.Empty<UserGroup>();
             }
 
             return users.Select((EduPassUser item) => (Resource)item).ToArray();

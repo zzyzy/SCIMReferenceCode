@@ -222,9 +222,10 @@ production store, but the obligations it discharges are the ones your provider i
 **Return `EduPassUser` instances.** `IProvider` is typed in terms of `Resource`, so the runtime
 subtype has to be preserved through create, retrieve, query and replace.
 
-**Populate `groups`.** `Core2UserBase.Groups` now exists (RFC 7643 §4.1.2) but nothing can fill
-it for you — only your store knows how users and groups relate. Edupass requires it on Create
-User, PUT, Get All Users and Get User By ID:
+**Populate `groups`.** `Core2UserBase.Groups` exists (RFC 7643 §4.1.2) but nothing can fill it
+for you — only your store knows how users and groups relate. Edupass requires it on **Create
+User, PUT, Get All Users and Get User By ID**; the create response is the one most easily
+forgotten, and the specification's own 201 example carries it:
 
 ```csharp
 user.Groups =
@@ -232,27 +233,54 @@ user.Groups =
         .Select(group => new UserGroup
         {
             Value = group.Identifier,
-            Reference = groupUri.ToString(),
             Display = group.DisplayName,
         })
         .ToArray();
 ```
+
+Two details that are easy to get wrong, both covered by
+`tests/integration/suites/edupass-conformance.spec.ts`:
+
+- **Empty is `[]`, not absent.** A user holding no role has `"groups": []`. Setting the property
+  to `null` omits it, and an omitted attribute is a different answer from an empty one.
+- **`groups` is read-only.** Discard whatever the client sent before storing, or a POST that
+  invents a role gets it echoed back as though the party held it.
+
+You do **not** set `$ref`. Only the request knows the service's base URI, so the hosting layer
+fills in the `$ref` of every `groups` and `members` entry the provider left unset — the same
+place, and for the same reason, as `meta.location`. Set it yourself only if your resources live
+somewhere other than this service.
 
 **Validate on write.** Call `EduPassValidator.Validate(user)` from `CreateAsync` and
 `ReplaceAsync`. It enforces the closed value sets, the UIN/FIN format, the 256-character ceiling
 and the single-primary-email rule, and throws `ScimTypedException` with `invalidValue` — which
 the handler turns into a 400 carrying that `scimType`.
 
-**Advertise the extension.** Add to `IProvider.Schema` and `IProvider.ResourceTypes`:
+**Advertise everything, not just the extension.** Edupass reads `/Schemas` and
+`/ResourceTypes` to learn what your party supports, so a payload carrying only the Edupass
+extension says you support no core attribute at all — not even `userName`. `BaseEduPassScimProvider`
+composes the full set for you:
 
 ```csharp
-schema.Add(EduPassTypeSchemes.CreateUserExtensionTypeScheme(includeUinFin: true));
-userTypeScheme.AddAttribute(EduPassTypeSchemes.CreateGroupsAttributeScheme());
-resourceTypes.Add(EduPassTypeSchemes.CreateUserResourceType());
+// IProvider.Schema
+EduPassTypeSchemes.CreateUserTypeScheme();                          // core User, incl. groups
+EduPassTypeSchemes.CreateGroupTypeScheme();                         // core Group, incl. members
+EduPassTypeSchemes.CreateUserExtensionTypeScheme(includeUinFin);    // the Edupass extension
+
+// IProvider.ResourceTypes
+EduPassTypeSchemes.CreateUserResourceType();    // declares the extension in schemaExtensions
+EduPassTypeSchemes.CreateGroupResourceType();
 ```
 
+`CreateUserTypeScheme` is deliberately **not** RFC 7643's whole User schema. It is exactly the
+User Schema table the Edupass specification sets out — `externalId`, `userName`, `name` with only
+`formatted` beneath it, `emails`, `title`, `active` — plus `groups`. That is the point of the
+endpoint: it is how a relying party says which fields it actually stores. Add or remove
+attributes to match yours.
+
 Pass `includeUinFin: false` if you do not store UIN/FIN — that is how the specification says to
-opt out, and Edupass will stop sending it.
+opt out, and Edupass will stop sending it. On `InMemoryEduPassProvider` the same flag also makes
+validation require it, so the two halves cannot drift apart.
 
 ### Keep users and groups consistent
 
@@ -333,30 +361,72 @@ Core and `ScimDirectRouteProvider.GetRoutePrefix` on net48. No `[Route]` attribu
 
 ---
 
-## 6. Still outstanding
+## 6. Out of scope, and why
 
-**Rate limiting.** The specification asks for 429 with `Retry-After` on create, update and
-delete. Nothing in this codebase implements it — it is neither SCIM nor Edupass-specific, so it
-belongs in your host. On ASP.NET Core use `AddRateLimiter`/`UseRateLimiter`; on IIS a request
-filtering rule or a gateway is usually simpler than middleware.
+Two of the specification's requirements are deliberately not implemented here. Both are
+properties of how you *deploy* the service, not of how it speaks SCIM, so a library that
+implemented either would be making a hosting decision on your behalf and would be wrong for
+half its callers.
 
-**TLS 1.2.** Both samples are HTTP-only development harnesses by design. TLS is the host's
-concern — see `docs/net48-hosting.md`.
+**Rate limiting — the host's responsibility.** The specification asks for **429** with a
+`Retry-After` header on the create, update and delete endpoints. Nothing in this codebase
+implements it and nothing will: the limit that is correct depends on your capacity, your
+tenancy model and whether anything else sits in front of you, and none of that is visible
+from inside a SCIM library. Where to put it:
 
-**Verification.** The 25-row Edupass test plan has been executed end to end against three hosts —
-the net10.0 sample, the net48 sample, and `InMemoryEduPassProvider` — with identical status codes
-on all three. See the `Test Execution` and `Provider Obligations` sheets in `test-plan.xlsx` for
-the request and response captured for every row. That run is what surfaced the three PATCH
-defects now fixed (`docs/scim-conformance.md` §5 items 12 and 13).
+| Host | Where |
+|---|---|
+| ASP.NET Core | `AddRateLimiter` / `UseRateLimiter`, or a reverse proxy |
+| net48 / IIS | an IIS request-filtering rule, `Microsoft.AspNet.WebApi.Extensions.Compression`-style middleware, or a gateway |
+| Either, behind a gateway | the gateway — usually the right answer, since it sheds load before it reaches your process |
 
-Two limits on what that proves. **The harnesses are not in this repository** — they are scripts
-run against a live host, so nothing re-checks these behaviours when the code next changes; the
-`replace`-on-`members` defect survived this long precisely because nothing was watching. And
-**none of it has touched a live Edupass endpoint.** Every FIMS-internal expectation in the plan —
-UPA creation, user-admin approval, position tables, notifications — has no counterpart here and
-was not exercised.
+The one thing the library does guarantee is that a 429 you raise **reaches the client
+unchanged**. A provider that throws `HttpResponseException(HttpStatusCode.TooManyRequests)` now
+gets a 429 on every verb; until recently POST and PUT rewrote it as 400 and an item GET as 500.
+That is covered by `A provider that faults: the status it chose` in
+`tests/integration/suites/faulty-provider.spec.ts`, so a regression fails the build. Adding the
+`Retry-After` header itself is your middleware's job — the SCIM layer does not set it.
 
-Before onboarding, at minimum: run the two Postman collections against both legs, confirm a real
-Edupass token validates (and that a rotated `kid` is picked up), and check the `/Schemas` and
-`/ResourceTypes` payloads against what Edupass expects. `docs/scim-conformance.md` is the row-by-
-row specification both legs are held to.
+**TLS 1.2 — the host's responsibility.** The specification requires TLS 1.2. Both samples are
+HTTP-only development harnesses by design, because terminating TLS in a sample would mean
+shipping a certificate. Configure it where the connection is accepted: Kestrel endpoint
+configuration or a reverse proxy on ASP.NET Core, the IIS site binding plus the
+`SCHANNEL`/.NET `SystemDefaultTlsVersions` registry settings on net48. See
+`docs/net48-hosting.md`, which covers the net48 half in detail.
+
+Neither of these is tracked as a gap in `docs/scim-conformance.md` or exercised by the
+conformance suite. They are boundaries, not omissions.
+
+---
+
+## 7. What is verified, and how
+
+Three layers, in increasing order of what they prove.
+
+**The Edupass test plan** — `tests/integration/suites/edupass-test-plan.spec.ts`, 25 rows,
+one per row of `test-plan.xlsx`. Basic acceptance: each endpoint is called and answers
+sensibly. The `Test Execution` and `Provider Obligations` sheets in `test-plan.xlsx` hold the
+request and response captured for every row.
+
+**The Edupass conformance suite** — `tests/integration/suites/edupass-conformance.spec.ts`.
+A different question from the test plan: not "does the endpoint answer" but "is the body the
+one the specification document describes". It covers what the plan never inspects — the
+`/Schemas` and `/ResourceTypes` payloads, the `groups` attribute on every User response that
+should carry it, and the `$ref` cross-references between a User and its Groups. Anything it
+found that was really the SCIM library's problem was fixed in the library and is tested in the
+SCIM suites (`resource-types.spec.ts`, `groups.spec.ts`, `protocol.spec.ts`,
+`filters.spec.ts`), not here, so that every relying party gets the fix and not only an
+Edupass one.
+
+**The SCIM suites** — everything else under `tests/integration/suites`, held to
+`docs/scim-conformance.md`.
+
+All of it runs on both legs: `pnpm test` for net10.0, `pnpm run test:net48` for net48.
+
+**What none of it proves.** No part of this has touched a live Edupass endpoint. Every
+FIMS-internal expectation in the test plan — UPA creation, user-admin approval, position
+tables, notifications — has no counterpart here and was not exercised. Before onboarding, at
+minimum: run the two Postman collections against both legs, confirm a real Edupass token
+validates and that a rotated `kid` is picked up (see the net48 caveat in section 1), and check
+the `/Schemas` and `/ResourceTypes` payloads against what Edupass expects for your application
+code.

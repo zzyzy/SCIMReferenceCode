@@ -7,6 +7,7 @@ import {
   SCHEMA_USER,
   createUser,
   devToken,
+  edupass,
   scim,
   unique,
   userBody,
@@ -266,5 +267,98 @@ describe("Bulk", () => {
     expect([200, 400, 501]).toContain(
       (await scim("POST", "/Bulk", { schemas: [SCHEMA_BULK_REQUEST] })).status,
     );
+  });
+});
+
+describe("ServiceProviderConfig: the member names RFC 7643 5 defines", () => {
+  it("names an authentication scheme's specification URL specUri", async () => {
+    // RFC 7643 section 5 spells the sub-attribute "specUri". "specUrl" is a member
+    // no client is looking for, so a scheme's specification link is invisible.
+    const response = await scim("GET", "/ServiceProviderConfig");
+    const schemes = response.body.authenticationSchemes as Record<string, unknown>[];
+
+    expect(schemes.length).toBeGreaterThan(0);
+    for (const scheme of schemes) {
+      expect(scheme).not.toHaveProperty("specUrl");
+      if (scheme["specUri"] !== undefined) {
+        expect(typeof scheme["specUri"]).toBe("string");
+      }
+    }
+  });
+
+  it("gives every authentication scheme the three members the RFC requires", async () => {
+    const response = await scim("GET", "/ServiceProviderConfig");
+
+    for (const scheme of response.body.authenticationSchemes as Record<string, unknown>[]) {
+      for (const member of ["type", "name", "description"]) {
+        expect(scheme, `a scheme is missing ${member}`).toHaveProperty(member);
+      }
+    }
+  });
+
+  it("spells any service-level documentation link documentationUri", async () => {
+    const response = await scim("GET", "/ServiceProviderConfig");
+
+    expect(response.body).not.toHaveProperty("documentationUrl");
+  });
+});
+
+describe("ServiceProviderConfig: filter.maxResults is a promise, not a note", () => {
+  // Exercised against the Edupass host so that filling a store past the advertised
+  // ceiling cannot disturb a core-host suite that walks an unfiltered collection.
+  it("returns no more resources than it advertises", async () => {
+    // RFC 7643 section 5 defines filter.maxResults as "the maximum number of
+    // resources returned in a response". Advertising 200 and then returning every
+    // resource in the store contradicts the service's own configuration, and a
+    // client sizing its buffers from the config is the one that pays for it.
+    const config = await edupass("GET", "/ServiceProviderConfig");
+    const maxResults = (config.body.filter as { maxResults?: number }).maxResults ?? 0;
+    expect(maxResults).toBeGreaterThan(0);
+
+    const before = await edupass("GET", "/Users");
+    const existing = before.body.totalResults as number;
+
+    for (let index = existing; index <= maxResults + 2; index += 1) {
+      const userName = `${unique("cap")}@moe.edu.sg`;
+      const created = await edupass("POST", "/Users", {
+        schemas: [SCHEMA_USER],
+        userName,
+        active: true,
+      });
+      expect(created.status).toBe(201);
+    }
+
+    const response = await edupass("GET", "/Users");
+
+    expect(response.status).toBe(200);
+    expect(response.body.totalResults).toBeGreaterThan(maxResults);
+    expect((response.body.Resources as unknown[]).length).toBeLessThanOrEqual(maxResults);
+    expect(response.body.itemsPerPage).toBeLessThanOrEqual(maxResults);
+  });
+
+  it("clamps a count larger than the advertised maximum", async () => {
+    const config = await edupass("GET", "/ServiceProviderConfig");
+    const maxResults = (config.body.filter as { maxResults?: number }).maxResults ?? 0;
+
+    const response = await edupass("GET", `/Users?count=${maxResults * 10}`);
+
+    expect(response.status).toBe(200);
+    expect((response.body.Resources as unknown[]).length).toBeLessThanOrEqual(maxResults);
+  });
+
+  it("still honours a count below the maximum", async () => {
+    const response = await edupass("GET", "/Users?count=3");
+
+    expect(response.status).toBe(200);
+    expect((response.body.Resources as unknown[]).length).toBeLessThanOrEqual(3);
+  });
+
+  it("still reports the true total above the ceiling", async () => {
+    // The cap limits the page, not the count. A client paging through has to be able
+    // to see how far it has to go.
+    const response = await edupass("GET", "/Users?count=1");
+
+    expect(response.body.itemsPerPage).toBe(1);
+    expect(response.body.totalResults).toBeGreaterThan(1);
   });
 });

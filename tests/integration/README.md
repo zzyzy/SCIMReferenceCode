@@ -116,6 +116,8 @@ collected alongside.
 | `suites/edupass.spec.ts` | the Edupass specification at a party that does not store UIN/FIN |
 | `suites/edupass-uinfin.spec.ts` | the same at a party that does |
 | `suites/edupass-test-plan.spec.ts` | the 25 numbered cases of `test-plan.xlsx`, and the CSV they produce |
+| `suites/edupass-conformance.spec.ts` | the Edupass specification read as a contract - discovery payloads, `groups`, `$ref` |
+| `suites/resource-types.spec.ts` | RFC 7643 6 - base schema and `schemaExtensions` |
 | `suites/unimplemented.spec.ts` | what a provider that implements nothing answers |
 | `suites/faulty-provider.spec.ts` | what a provider that throws answers |
 
@@ -149,6 +151,27 @@ Two mappings the cases make explicit, because the plan leaves them implicit:
   the Group and derived onto the User. Those cases assert the `400 invalidPath` and record what
   Edupass should send instead. They also check the refusal changed nothing — a rejected patch
   that had dropped the old location would be the worst outcome.
+
+## The Edupass conformance suite
+
+`suites/edupass-conformance.spec.ts` asks a different question from the test plan. The plan is
+basic acceptance — can each endpoint be called, does it answer sensibly. The conformance suite
+asks whether the response body is the one the specification document actually describes, which
+means the parts the plan never inspects: the `/Schemas` and `/ResourceTypes` payloads, the
+`groups` attribute on every User response that should carry it, and the `$ref` cross-references
+between a User and its Groups.
+
+**Where a finding goes.** Everything in that file is something the Edupass specification
+requires and RFC 7643/7644 does not. A gap that turns out to be the SCIM library's belongs in a
+SCIM suite instead — `resource-types.spec.ts`, `groups.spec.ts`, `protocol.spec.ts`,
+`filters.spec.ts` — because fixing it there fixes it for every relying party rather than only
+an Edupass one. Several of the suite's original failures moved that way: `schemaExtensions` on a
+resource type, `$ref` on `members`, `specUri`, and the `filter.maxResults` cap are all RFC
+requirements, so they are tested against the core host and only their Edupass consequences are
+asserted here.
+
+**Rate limiting and TLS are not in it.** Both are the host's responsibility rather than the
+library's; see section 6 of `docs/edupass-integration.md`.
 
 ## Two things worth knowing before changing these
 

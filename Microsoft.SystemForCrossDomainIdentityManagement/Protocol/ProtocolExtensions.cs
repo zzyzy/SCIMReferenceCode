@@ -209,12 +209,7 @@ namespace Microsoft.SCIM
                                     operation
                                     .Value
                                     .Where((OperationValue item) => !string.IsNullOrWhiteSpace(item.Value))
-                                    .Select(
-                                        (OperationValue item) =>
-                                            new Member()
-                                            {
-                                                Value = item.Value
-                                            })
+                                    .Select(ProtocolExtensions.ToMember)
                                     .GroupBy((Member item) => item.Value, StringComparer.OrdinalIgnoreCase)
                                     .Select((IGrouping<string, Member> item) => item.First())
                                     .ToArray();
@@ -224,12 +219,7 @@ namespace Microsoft.SCIM
                                 IEnumerable<Member> membersToAdd =
                                      operation
                                      .Value
-                                     .Select(
-                                         (OperationValue item) =>
-                                             new Member()
-                                             {
-                                                 Value = item.Value
-                                             })
+                                     .Select(ProtocolExtensions.ToMember)
                                      .ToArray();
 
                                 IList<Member> buffer = new List<Member>();
@@ -262,11 +252,17 @@ namespace Microsoft.SCIM
                                     break;
                                 }
 
+                                // Ordinal-ignore-case, because adding is case-insensitive and
+                                // so is every membership lookup. A case-sensitive removal
+                                // means a member can be added and then never removed by a
+                                // client whose identifier came back in a different case.
                                 IDictionary<string, Member> members =
-                                    new Dictionary<string, Member>(group.Members.Count());
+                                    new Dictionary<string, Member>(
+                                        group.Members.Count(),
+                                        StringComparer.OrdinalIgnoreCase);
                                 foreach (Member item in group.Members)
                                 {
-                                    members.Add(item.Value, item);
+                                    members[item.Value] = item;
                                 }
 
                                 foreach (OperationValue operationValue in operation.Value)
@@ -293,6 +289,27 @@ namespace Microsoft.SCIM
                             SystemForCrossDomainIdentityManagementProtocolResources.ExceptionInvalidPathTemplate,
                             operation.Path));
             }
+        }
+
+        /// <summary>
+        /// Carries a patched membership entry across whole, not just its <c>value</c>.
+        /// </summary>
+        /// <remarks>
+        /// RFC 7643 section 4.2 gives <c>members</c> the <c>$ref</c>, <c>display</c> and
+        /// <c>type</c> sub-attributes. Rebuilding the entry from <c>value</c> alone
+        /// discarded whatever else the client sent while still answering success, so a
+        /// group read back after a write was missing references the client had supplied.
+        /// </remarks>
+        private static Member ToMember(OperationValue value)
+        {
+            return
+                new Member()
+                {
+                    Value = value.Value,
+                    Reference = value.Reference,
+                    Display = value.Display,
+                    TypeName = value.TypeName,
+                };
         }
 
         public static HttpRequestMessage ComposeDeleteRequest(this Resource resource, Uri baseResourceIdentifier)

@@ -62,9 +62,14 @@ namespace Scim.EduPass
         /// The User resource type, declaring the Edupass extension in
         /// <c>schemaExtensions</c>, for <c>IProvider.ResourceTypes</c>.
         /// </summary>
+        /// <remarks>
+        /// The extension is declared required, which is what the specification's own
+        /// Get All Resource Types example shows. It is how Edupass learns the extension is
+        /// part of the User resource rather than a schema the party happens to publish.
+        /// </remarks>
         public static Core2ResourceType CreateUserResourceType()
         {
-            return
+            Core2ResourceType resourceType =
                 new Core2ResourceType
                 {
                     Identifier = Types.User,
@@ -73,6 +78,210 @@ namespace Scim.EduPass
                         System.UriKind.Relative),
                     Schema = SchemaIdentifiers.Core2User,
                 };
+
+            resourceType.AddSchemaExtension(EduPassSchemaIdentifiers.UserExtension, required: true);
+
+            return resourceType;
+        }
+
+        /// <summary>
+        /// The Group resource type, for <c>IProvider.ResourceTypes</c>.
+        /// </summary>
+        /// <remarks>
+        /// A relying party with Edupass-managed roles serves <c>/Groups</c>, so the endpoint
+        /// has to appear here. Omitting it told Edupass the party had no Group resource while
+        /// the route answered requests.
+        /// </remarks>
+        public static Core2ResourceType CreateGroupResourceType()
+        {
+            return
+                new Core2ResourceType
+                {
+                    Identifier = Types.Group,
+                    Endpoint = new System.Uri(
+                        ServiceConstants.SeparatorSegments + ProtocolConstants.PathGroups,
+                        System.UriKind.Relative),
+                    Schema = SchemaIdentifiers.Core2Group,
+                };
+        }
+
+        /// <summary>
+        /// The core User schema as an Edupass relying party supports it, for
+        /// <c>IProvider.Schema</c>.
+        /// </summary>
+        /// <remarks>
+        /// The specification requires <c>/Schemas</c> to "minimally include the core User
+        /// schema", and says a relying party indicates which fields it supports through that
+        /// endpoint. So this is not RFC 7643's whole User schema: it is exactly the User
+        /// Schema table the Edupass specification sets out - externalId, userName, name with
+        /// only <c>formatted</c> beneath it, emails, title, active - plus <c>groups</c>.
+        /// </remarks>
+        public static TypeScheme CreateUserTypeScheme()
+        {
+            TypeScheme scheme =
+                new TypeScheme
+                {
+                    Identifier = SchemaIdentifiers.Core2User,
+                    Name = Types.User,
+                    Description = "User Account",
+                };
+
+            scheme.AddAttribute(
+                new AttributeScheme(AttributeNames.UserName, AttributeDataType.@string, plural: false)
+                {
+                    Description = "The Edupass identifier, unique within the relying party.",
+                    Required = true,
+                    Uniqueness = Uniqueness.server,
+                    Returned = Returned.@default,
+                });
+
+            scheme.AddAttribute(
+                new AttributeScheme(
+                    AttributeNames.ExternalIdentifier,
+                    AttributeDataType.@string,
+                    plural: false)
+                {
+                    Description = "Edupass's identifier for the resource.",
+                    Returned = Returned.@default,
+                });
+
+            AttributeScheme name =
+                new AttributeScheme(AttributeNames.Name, AttributeDataType.complex, plural: false)
+                {
+                    Description = "The name of the user associated with the Edupass identity.",
+                    Returned = Returned.@default,
+                };
+
+            // Only formatted. The specification says so explicitly: "While SCIM's name object
+            // defines other name components like familyName, givenName and honorificPrefix,
+            // Edupass will not be including these fields."
+            name.AddSubAttribute(
+                new AttributeScheme(AttributeNames.Formatted, AttributeDataType.@string, plural: false)
+                {
+                    Description = "The full name of the user.",
+                });
+
+            scheme.AddAttribute(name);
+
+            AttributeScheme emails =
+                new AttributeScheme(
+                    AttributeNames.ElectronicMailAddresses,
+                    AttributeDataType.complex,
+                    plural: true)
+                {
+                    Description = "Email addresses for the user.",
+                    Returned = Returned.@default,
+                };
+
+            AttributeScheme emailType =
+                new AttributeScheme(AttributeNames.Type, AttributeDataType.@string, plural: false)
+                {
+                    Description = "The kind of email address.",
+                };
+
+            foreach (string value in EduPassValues.ElectronicMailAddressTypes)
+            {
+                emailType.AddCanonicalValues(value);
+            }
+
+            emails.AddSubAttribute(
+                new AttributeScheme(AttributeNames.Value, AttributeDataType.@string, plural: false)
+                {
+                    Description = "The email address.",
+                });
+            emails.AddSubAttribute(emailType);
+            emails.AddSubAttribute(
+                new AttributeScheme(AttributeNames.Primary, AttributeDataType.boolean, plural: false)
+                {
+                    Description = "True for the notification email, false otherwise.",
+                });
+
+            scheme.AddAttribute(emails);
+
+            scheme.AddAttribute(
+                new AttributeScheme(AttributeNames.Title, AttributeDataType.@string, plural: false)
+                {
+                    Description = "The job title of the user.",
+                    Returned = Returned.@default,
+                });
+
+            scheme.AddAttribute(
+                new AttributeScheme(AttributeNames.Active, AttributeDataType.boolean, plural: false)
+                {
+                    Description = "Whether the identity is active at the relying party.",
+                    Returned = Returned.@default,
+                });
+
+            scheme.AddAttribute(EduPassTypeSchemes.CreateGroupsAttributeScheme());
+
+            return scheme;
+        }
+
+        /// <summary>
+        /// The core Group schema as an Edupass relying party supports it, for
+        /// <c>IProvider.Schema</c>.
+        /// </summary>
+        /// <remarks>
+        /// "For RPs that support the Group resource, this must include the core Group schema."
+        /// The Edupass Group Schema table is three attributes wide: externalId, displayName
+        /// and the members the Members Attribute section describes.
+        /// </remarks>
+        public static TypeScheme CreateGroupTypeScheme()
+        {
+            TypeScheme scheme =
+                new TypeScheme
+                {
+                    Identifier = SchemaIdentifiers.Core2Group,
+                    Name = Types.Group,
+                    Description = "Group",
+                };
+
+            scheme.AddAttribute(
+                new AttributeScheme(AttributeNames.DisplayName, AttributeDataType.@string, plural: false)
+                {
+                    Description =
+                        "The application role, as <location code>_<app code>_<role code>.",
+                    Required = true,
+                    Uniqueness = Uniqueness.server,
+                    Returned = Returned.@default,
+                });
+
+            scheme.AddAttribute(
+                new AttributeScheme(
+                    AttributeNames.ExternalIdentifier,
+                    AttributeDataType.@string,
+                    plural: false)
+                {
+                    Description = "Edupass's identifier for the Group encoding the role.",
+                    Returned = Returned.@default,
+                });
+
+            AttributeScheme members =
+                new AttributeScheme(AttributeNames.Members, AttributeDataType.complex, plural: true)
+                {
+                    Description = "The users holding the application role.",
+                    Returned = Returned.@default,
+                };
+
+            members.AddSubAttribute(
+                new AttributeScheme(AttributeNames.Value, AttributeDataType.@string, plural: false)
+                {
+                    Description = "The identifier of the member.",
+                });
+            members.AddSubAttribute(
+                new AttributeScheme(AttributeNames.Reference, AttributeDataType.reference, plural: false)
+                {
+                    Description = "The URI of the member.",
+                });
+            members.AddSubAttribute(
+                new AttributeScheme(AttributeNames.Display, AttributeDataType.@string, plural: false)
+                {
+                    Description = "The display name of the member.",
+                });
+
+            scheme.AddAttribute(members);
+
+            return scheme;
         }
 
         /// <summary>

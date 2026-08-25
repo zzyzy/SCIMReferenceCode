@@ -247,3 +247,35 @@ describe("Pagination", () => {
     }
   });
 });
+
+describe("Filters: the keyword a rejected filter carries", () => {
+  it("names invalidFilter when a collection filter is unsupported", async () => {
+    const response = await scim("GET", `/Users${filterQuery('nickname eq "x"')}`);
+
+    expect(response.status).toBe(400);
+    expect(response.body.scimType).toBe("invalidFilter");
+  });
+
+  it("names invalidFilter when the same filter is sent to a single resource", async () => {
+    // RFC 7644 3.12 ties invalidFilter to "the specified filter syntax was invalid,
+    // or the specified attribute and filter comparison combination is not supported".
+    // The attribute is what is wrong either way, so answering invalidValue on one
+    // path and invalidFilter on the other makes the same mistake look like two.
+    const created = await createUser();
+    const response = await scim(
+      "GET",
+      `/Users/${created.id}${filterQuery('nickname eq "x"')}`,
+    );
+
+    expect(response.status).toBe(400);
+    expect(response.body.scimType).toBe("invalidFilter");
+  });
+
+  it("names invalidFilter for a malformed filter on a single resource", async () => {
+    const created = await createUser();
+    const response = await scim("GET", `/Users/${created.id}${filterQuery("userName eq")}`);
+
+    expect(response.status).toBe(400);
+    expect(response.body.scimType).toBe("invalidFilter");
+  });
+});

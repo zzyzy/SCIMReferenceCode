@@ -74,6 +74,11 @@ namespace Microsoft.SCIM
                 return;
             }
 
+            // Before the metadata block, not after it: a provider that already set
+            // meta.location returns early below, and the cross-references would then never
+            // be filled in on exactly the resources whose provider was most thorough.
+            ScimRequestHandler<T>.EnsureReferences(request, resource);
+
             Core2Metadata metadata = (resource as Core2UserBase)?.Metadata ?? (resource as Core2GroupBase)?.Metadata;
 
             if (null == metadata || !string.IsNullOrWhiteSpace(metadata.Location))
@@ -91,6 +96,78 @@ namespace Microsoft.SCIM
                 // The request URI does not contain the SCIM interface segment, so no absolute
                 // resource URI can be derived. Leaving location unset is better than guessing.
             }
+        }
+
+        /// <summary>
+        /// Fills in the <c>$ref</c> of a resource's cross-references.
+        /// </summary>
+        /// <remarks>
+        /// RFC 7643 gives both <c>groups</c> (section 4.1.2) and <c>members</c> (section 4.2)
+        /// a <c>$ref</c> sub-attribute holding the URI of the resource on the other side. Only
+        /// the request knows the service's base URI, which is why this sits here beside
+        /// <c>meta.location</c> rather than in a provider: a provider that tried to build the
+        /// URI would have to be told where it is being served from, and every provider would
+        /// have to be told separately.
+        ///
+        /// A reference the provider set is left alone. This only supplies the ones it could
+        /// not.
+        /// </remarks>
+        protected static void EnsureReferences(HttpRequestMessage request, Resource resource)
+        {
+            if (null == request || null == resource)
+            {
+                return;
+            }
+
+            Uri baseResource;
+            try
+            {
+                baseResource = request.GetBaseResourceIdentifier();
+            }
+            catch (ArgumentException)
+            {
+                return;
+            }
+
+            if (null == baseResource)
+            {
+                return;
+            }
+
+            if (resource is Core2UserBase user && null != user.Groups)
+            {
+                foreach (UserGroup group in user.Groups)
+                {
+                    if (string.IsNullOrWhiteSpace(group?.Reference) && !string.IsNullOrWhiteSpace(group?.Value))
+                    {
+                        group.Reference =
+                            ScimRequestHandler<T>.ComposeReference(baseResource, ProtocolConstants.PathGroups, group.Value);
+                    }
+                }
+            }
+
+            if (resource is Core2GroupBase groupResource && null != groupResource.Members)
+            {
+                foreach (Member member in groupResource.Members)
+                {
+                    if (string.IsNullOrWhiteSpace(member?.Reference) && !string.IsNullOrWhiteSpace(member?.Value))
+                    {
+                        member.Reference =
+                            ScimRequestHandler<T>.ComposeReference(baseResource, ProtocolConstants.PathUsers, member.Value);
+                    }
+                }
+            }
+        }
+
+        private static string ComposeReference(Uri baseResource, string path, string identifier)
+        {
+            string prefix = baseResource.AbsoluteUri.TrimEnd('/');
+            return
+                prefix
+                + ServiceConstants.SeparatorSegments
+                + path
+                + ServiceConstants.SeparatorSegments
+                + Uri.EscapeDataString(identifier);
         }
 
         /// <summary>Applies <see cref="EnsureMetadataLocation"/> across a query response.</summary>
@@ -322,16 +399,39 @@ namespace Microsoft.SCIM
                             resourceQuery.Attributes,
                             resourceQuery.ExcludedAttributes);
                     IProviderAdapter<T> provider = this.AdaptProvider();
-                    QueryResponseBase queryResponse =
-                        await provider
-                            .Query(
-                                request,
-                                effectiveQuery.Filters,
-                                effectiveQuery.Attributes,
-                                effectiveQuery.ExcludedAttributes,
-                                effectiveQuery.PaginationParameters,
-                                correlationIdentifier)
-                            .ConfigureAwait(false);
+                    QueryResponseBase queryResponse;
+
+                    try
+                    {
+                        queryResponse =
+                            await provider
+                                .Query(
+                                    request,
+                                    effectiveQuery.Filters,
+                                    effectiveQuery.Attributes,
+                                    effectiveQuery.ExcludedAttributes,
+                                    effectiveQuery.PaginationParameters,
+                                    correlationIdentifier)
+                                .ConfigureAwait(false);
+                    }
+                    catch (NotSupportedException unsupportedFilter)
+                    {
+                        // invalidFilter, as the collection query already answers for the
+                        // same refusal. The request only reaches the provider because it
+                        // carried a filter, so a provider declining it is declining the
+                        // filter - and reporting that as invalidValue made one mistake
+                        // look like two different ones depending on the URL it arrived on.
+                        this.Logger.LogScimFailure(
+                            ScimEventIds.GetNotSupportedException,
+                            unsupportedFilter,
+                            correlationIdentifier,
+                            request);
+
+                        throw new ScimTypedException(
+                            HttpStatusCode.BadRequest,
+                            ScimTypes.InvalidFilter,
+                            unsupportedFilter.Message);
+                    }
                     if (!queryResponse.Resources.Any())
                     {
                         return ScimResult.Error(HttpStatusCode.NotFound, string.Format(SystemForCrossDomainIdentityManagementServiceResources.ResourceNotFoundTemplate, identifier));
@@ -419,7 +519,10 @@ namespace Microsoft.SCIM
                     return ScimResult.Error(HttpStatusCode.NotFound, string.Format(SystemForCrossDomainIdentityManagementServiceResources.ResourceNotFoundTemplate, identifier));
                 }
 
-                return ScimResult.Error(HttpStatusCode.InternalServerError, responseException.Message);
+                // The status the provider chose. Reporting every one of them as 500 said
+                // the service had failed, when a 403 or a 501 is a deliberate answer the
+                // client can act on.
+                return ScimResult.FromException(responseException);
             }
             catch (Exception exception)
             {
@@ -664,9 +767,16 @@ namespace Microsoft.SCIM
                     request);
 
                 if (httpResponseException.Response.StatusCode == HttpStatusCode.Conflict)
+                {
                     return ScimResult.Status(HttpStatusCode.Conflict);
-                else
-                    return ScimResult.Status(HttpStatusCode.BadRequest);
+                }
+
+                // The status the provider chose, not a blanket 400. A provider is
+                // entitled to answer 403 for a caller its store will not serve, 501 for
+                // an operation it does not offer, or 429 for one it is shedding, and
+                // rewriting all three as "your request was malformed" told the client
+                // something untrue and not retryable.
+                return ScimResult.FromException(httpResponseException);
             }
             catch (Exception exception)
             {
@@ -741,6 +851,11 @@ namespace Microsoft.SCIM
                 IProviderAdapter<T> provider = this.AdaptProvider();
                 Resource result = await provider.Replace(request, resource, correlationIdentifier).ConfigureAwait(false);
 
+                // As the create, read and query paths already do. Without it a replace was
+                // the one response whose meta.location and cross-references depended on the
+                // provider having built them itself.
+                ScimRequestHandler<T>.EnsureMetadataLocation(request, result);
+
                 // RFC 7644 section 3.5.1: a successful replace is 200, not 201. The pre-port
                 // code set 201 unconditionally in ConfigureResponse and then returned Ok(),
                 // leaving the wire status dependent on result-execution ordering. D15.
@@ -789,16 +904,22 @@ namespace Microsoft.SCIM
                     request);
 
                 if (httpResponseException.Response.StatusCode == HttpStatusCode.NotFound)
+                {
                     return ScimResult.Error(HttpStatusCode.NotFound, string.Format(SystemForCrossDomainIdentityManagementServiceResources.ResourceNotFoundTemplate, identifier));
-                else if (httpResponseException.Response.StatusCode == HttpStatusCode.Conflict)
+                }
+
+                if (httpResponseException.Response.StatusCode == HttpStatusCode.Conflict)
+                {
                     return ScimResult.Error(HttpStatusCode.Conflict, SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidRequest);
-                else
-                    // Not the exception's Message: an HttpResponseException thrown for its
-                    // status alone carries "Exception of type '...' was thrown.", which was
-                    // being handed to the caller as the error detail.
-                    return ScimResult.Error(
-                        HttpStatusCode.BadRequest,
-                        SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidRequest);
+                }
+
+                // The status the provider chose. Not the exception's Message, though: an
+                // HttpResponseException thrown for its status alone carries "Exception of
+                // type '...' was thrown.", which is no use as an error detail.
+                return ScimResult.Error(
+                    httpResponseException.Response?.StatusCode ?? HttpStatusCode.BadRequest,
+                    SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidRequest,
+                    (httpResponseException as ScimTypedException)?.ScimType);
             }
             catch (Exception exception)
             {

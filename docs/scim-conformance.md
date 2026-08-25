@@ -329,6 +329,56 @@ against the `netcoreapp3.1` build should expect exactly these differences and no
     and two consumers need not choose alike. Create and replace answer 400 `invalidValue`. This
     can break a client that was sending two and being accepted.
 
+22. **A resource type can declare `schemaExtensions`, and the sample User type now does.**
+    RFC 7643 §6 gives every resource type a `schemaExtensions` list; `Core2ResourceType` modelled
+    only `schema`, so a service offering an extension had nowhere to say so. The sample worked
+    around that by declaring the enterprise schema as the User type's **base** schema — telling
+    a client that `/Users` does not serve the core User schema at all. The member now exists,
+    the User type's base is `urn:ietf:params:scim:schemas:core:2.0:User`, and enterprise is
+    declared as an extension with `required: false`. A client keying off the old `schema` value
+    sees a different string. Covered by `resource-types.spec.ts`.
+
+23. **`members` keeps `$ref`, `display` and `type` through a PATCH.** RFC 7643 §4.2 gives the
+    attribute those sub-attributes, and `OperationValue` could not hold `display` or `type` at
+    all. Every membership entry was rebuilt from `value` alone, so a client that sent a
+    reference got success and a group that had silently dropped it. `OperationValue` now carries
+    all four and the members path preserves them. Covered by `groups.spec.ts`.
+
+24. **Removing a member is case-insensitive, as adding already was.** The removal built its
+    lookup with the default comparer while add, and the membership projection, used
+    `OrdinalIgnoreCase`. A member added under one casing could not be removed under another.
+    Covered by `groups.spec.ts`.
+
+25. **`groups` and `members` get their `$ref` filled in by the hosting layer.** Only the request
+    knows the service's base URI, so a provider cannot build an absolute cross-reference without
+    being told where it is served from. `EnsureReferences` now supplies any `$ref` the provider
+    left unset, beside `meta.location` and for the same reason. A `$ref` the provider did set is
+    left alone. `ReplaceAsync` also calls the metadata/reference pass, which it never did — a
+    `PUT` response was the one whose `meta.location` depended entirely on the provider.
+
+26. **`specUri` and `documentationUri` are spelled as RFC 7643 §5 spells them.** They were
+    `specUrl` and `documentationUrl`, which no client reading the RFC looks for. A client keying
+    off the old names sees them disappear. Covered by `protocol.spec.ts`.
+
+27. **The advertised `filter.maxResults` is enforced.** RFC 7643 §5 defines it as "the maximum
+    number of resources returned in a response"; the service advertised 200 and then returned
+    the whole store, so a client sizing itself from the configuration got a page it never agreed
+    to accept. `PaginateQueryAsync` now caps the page at the advertised value. `totalResults`
+    still reports every match, so paging still terminates. A client that relied on one
+    unbounded `GET /Users` now has to page. Covered by `protocol.spec.ts`.
+
+28. **A provider's chosen status survives every verb.** `POST` rewrote anything but 409 as 400,
+    `PUT` anything but 404/409 as 400, and an item `GET` anything but 404 as **500**. A provider
+    answering 403, 429 or 501 on those verbs could not be heard. All three now carry the status
+    through; the 404 and 409 messages are unchanged, and an exception that is not an
+    `HttpResponseException` still produces the 500 catch-all. Covered by
+    `faulty-provider.spec.ts`, whose provider now faults with a status named in the request.
+
+29. **An unsupported filter on a single-resource GET answers `invalidFilter`.** The collection
+    query already did; the item path let the provider's `NotSupportedException` fall through to
+    the default `invalidValue`, so the same mistake looked like two different ones depending on
+    the URL it arrived on. Covered by `filters.spec.ts`.
+
 ---
 
 ## 6. Postman assertion inventory
@@ -391,8 +441,11 @@ test script at all. Its `Get Token` request targets Entra, not the sample's toke
 | 3 — cross-host byte diff of every §2/§3 request, net48 vs net10 | any divergence between the legs, headers included | a fault both legs share — this is the port's core accepted exposure |
 | 4 — `Microsoft.SCIM.LogicAppValidationTemplate/StandardLogicApp` against both hosts | Entra-realistic end-to-end provisioning | whatever the templates do not exercise |
 
-There are no automated tests in this repository; that is a deliberate scope decision.
-Oracles 1 and 3 are manual. Read the four together, not individually.
+| 5 — `tests/integration`, run per leg | the rows above that can be observed over HTTP, plus the Edupass conformance suite | anything needing a live Edupass endpoint, and the FIMS-internal half of the test plan |
+
+Oracle 5 is the one that runs on demand: `pnpm test` for net10.0 and `pnpm run test:net48` for
+net48, against sample hosts the harness starts itself. Oracles 1 and 3 remain manual. Read them
+together, not individually.
 
 ### Status of oracle 1 as of the port
 

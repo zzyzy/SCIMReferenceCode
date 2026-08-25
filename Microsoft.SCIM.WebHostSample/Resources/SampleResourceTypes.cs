@@ -10,12 +10,18 @@ namespace Microsoft.SCIM.WebHostSample.Resources
         {
             get
             {
+                // The base schema is the core User one. The enterprise schema extends it,
+                // and now that a resource type can say so it is declared as an extension
+                // rather than substituted for the base - which had been telling clients
+                // that /Users does not serve the core User schema at all.
                 Core2ResourceType userResource = new Core2ResourceType
                 {
                     Identifier = Types.User,
                     Endpoint = new Uri($"{SampleConstants.SampleScimEndpoint}/Users"),
-                    Schema = SampleConstants.UserEnterpriseSchema
+                    Schema = $"{SampleConstants.Core2SchemaPrefix}{Types.User}"
                 };
+
+                userResource.AddSchemaExtension(SampleConstants.UserEnterpriseSchema, required: false);
 
                 return userResource;
             }

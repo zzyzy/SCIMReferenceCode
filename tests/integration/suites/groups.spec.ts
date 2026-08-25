@@ -254,3 +254,126 @@ describe("Groups: rename", () => {
     expect(response.body).not.toHaveProperty("members");
   });
 });
+
+describe("Groups: the members attribute keeps what RFC 7643 4.2 defines", () => {
+  it("keeps the $ref a client supplied with a member", async () => {
+    // RFC 7643 section 4.2 gives members a $ref sub-attribute, and a client that
+    // sends one has said where the member lives. Rebuilding the entry from `value`
+    // alone throws that away silently: the write succeeds and the reference is gone.
+    const group = await createGroup();
+    const user = await createUser();
+    const reference = `http://localhost/scim/Users/${user.id}`;
+
+    const patched = await scim(
+      "PATCH",
+      `/Groups/${group.id}`,
+      patchOp({ op: "add", path: "members", value: [{ value: user.id, $ref: reference }] }),
+    );
+    expect(PATCH_APPLIED).toContain(patched.status);
+
+    const members = ((await readGroup(group.id)).members ?? []) as {
+      value: string;
+      $ref?: string;
+    }[];
+
+    expect(members).toHaveLength(1);
+    expect(members[0]?.$ref).toBe(reference);
+  });
+
+  it("keeps a member's display alongside its value", async () => {
+    const group = await createGroup();
+    const user = await createUser();
+
+    expect(PATCH_APPLIED).toContain(
+      (
+        await scim(
+          "PATCH",
+          `/Groups/${group.id}`,
+          patchOp({
+            op: "add",
+            path: "members",
+            value: [{ value: user.id, display: "Ada Lovelace", type: "User" }],
+          }),
+        )
+      ).status,
+    );
+
+    const members = ((await readGroup(group.id)).members ?? []) as {
+      value: string;
+      display?: string;
+      type?: string;
+    }[];
+
+    expect(members[0]?.display).toBe("Ada Lovelace");
+    expect(members[0]?.type).toBe("User");
+  });
+
+  it("keeps the $ref through a replace, which is a full membership sync", async () => {
+    const group = await createGroup();
+    const user = await createUser();
+    const reference = `http://localhost/scim/Users/${user.id}`;
+
+    expect(PATCH_APPLIED).toContain(
+      (
+        await scim(
+          "PATCH",
+          `/Groups/${group.id}`,
+          patchOp({ op: "replace", path: "members", value: [{ value: user.id, $ref: reference }] }),
+        )
+      ).status,
+    );
+
+    const members = ((await readGroup(group.id)).members ?? []) as { $ref?: string }[];
+    expect(members[0]?.$ref).toBe(reference);
+  });
+
+  it("removes a member whose identifier differs only in case", async () => {
+    // Adding is case-insensitive and the membership projection is case-insensitive,
+    // so removing must be too. Otherwise a client that round-trips an identifier
+    // through anything that changes its case can add a member it can never remove.
+    const group = await createGroup();
+    const user = await createUser();
+
+    expect(PATCH_APPLIED).toContain(
+      (
+        await scim(
+          "PATCH",
+          `/Groups/${group.id}`,
+          patchOp({ op: "add", path: "members", value: [{ value: user.id }] }),
+        )
+      ).status,
+    );
+    expect(await memberIds(group.id)).toEqual([user.id]);
+
+    expect(PATCH_APPLIED).toContain(
+      (
+        await scim(
+          "PATCH",
+          `/Groups/${group.id}`,
+          patchOp({ op: "remove", path: "members", value: [{ value: user.id.toUpperCase() }] }),
+        )
+      ).status,
+    );
+
+    expect(await memberIds(group.id)).toEqual([]);
+  });
+
+  it("does not add the same member twice when the case differs", async () => {
+    const group = await createGroup();
+    const user = await createUser();
+
+    for (const value of [user.id, user.id.toUpperCase()]) {
+      expect(PATCH_APPLIED).toContain(
+        (
+          await scim(
+            "PATCH",
+            `/Groups/${group.id}`,
+            patchOp({ op: "add", path: "members", value: [{ value }] }),
+          )
+        ).status,
+      );
+    }
+
+    expect((await readGroup(group.id)).members as unknown[]).toHaveLength(1);
+  });
+});

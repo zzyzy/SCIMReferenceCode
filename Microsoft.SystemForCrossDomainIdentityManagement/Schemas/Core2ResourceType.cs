@@ -5,6 +5,7 @@
 namespace Microsoft.SCIM
 {
     using System;
+    using System.Collections.Generic;
     using System.Runtime.Serialization;
 
     [DataContract]
@@ -55,6 +56,43 @@ namespace Microsoft.SCIM
         {
             get;
             set;
+        }
+
+        /// <summary>
+        /// The schemas layered on <see cref="Schema"/> (RFC 7643 section 6).
+        /// </summary>
+        /// <remarks>
+        /// Null rather than an empty list when there are none, so that a resource type
+        /// with no extension does not emit an empty array - the serializer drops nulls,
+        /// which is how every other optional collection in the library behaves.
+        /// </remarks>
+        [DataMember(Name = AttributeNames.SchemaExtensions, IsRequired = false, EmitDefaultValue = false)]
+        public IReadOnlyCollection<SchemaExtension> SchemaExtensions
+        {
+            get;
+            set;
+        }
+
+        /// <summary>Declares one extension against this resource type.</summary>
+        public void AddSchemaExtension(string schema, bool required)
+        {
+            if (string.IsNullOrWhiteSpace(schema))
+            {
+                throw new ArgumentNullException(nameof(schema));
+            }
+
+            List<SchemaExtension> extensions =
+                new List<SchemaExtension>(this.SchemaExtensions ?? Array.Empty<SchemaExtension>());
+
+            if (extensions.Exists(
+                    (SchemaExtension item) =>
+                        string.Equals(item.Schema, schema, StringComparison.OrdinalIgnoreCase)))
+            {
+                return;
+            }
+
+            extensions.Add(new SchemaExtension() { Schema = schema, Required = required });
+            this.SchemaExtensions = extensions;
         }
 
         private void InitializeEndpoint(string value)

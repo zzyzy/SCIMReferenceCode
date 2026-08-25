@@ -26,7 +26,9 @@ namespace Microsoft.SCIM
         public const string Display = "display";
         public const string DisplayName = "displayName";
         public const string Division = "division";
-        public const string Documentation = "documentationUrl";
+        // RFC 7643 section 5 spells both of these with "Uri". They were "documentationUrl"
+        // and "specUrl", which no client reading the RFC looks for.
+        public const string Documentation = "documentationUri";
         public const string ElectronicMailAddresses = "emails";
         public const string EmployeeNumber = "employeeNumber";
         public const string Endpoint = "endpoint";
@@ -86,10 +88,11 @@ namespace Microsoft.SCIM
         public const string ResourceType = "resourceType";
         public const string Returned = "returned";
         public const string Schema = "schema";
+        public const string SchemaExtensions = "schemaExtensions";
         public const string Schemas = "schemas";
         public const string SecurityEnabled = "securityEnabled";
         public const string Sort = "sort";
-        public const string Specification = "specUrl";
+        public const string Specification = "specUri";
         public const string StreetAddress = "streetAddress";
         public const string SubAttributes = "subAttributes";
         public const string Supported = "supported";
