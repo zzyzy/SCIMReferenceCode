@@ -166,7 +166,7 @@ rather than returning a result. §4 covers the mapping.
 | # | Requirement | Authority |
 |---|---|---|
 | X1 | Every `HttpResponseException` thrown anywhere in `Microsoft.SCIM` surfaces as **that** status code, never as 500. See the enumeration below. | RFC 7644 §3.12 |
-| X2 | No `Authorization` header → **401** | RFC 7644 §2 |
+| X2 | No `Authorization` header → **401**, with a `WWW-Authenticate` challenge and **no body on either leg**. Web API's `AuthorizeAttribute` answers with its own `{"Message":…}` error document, which is neither a `Core2Error` nor what ASP.NET Core sends; `ScimUnauthorizedResponseHandler` removes it. RFC 7644 §3.12 prefixes its body table with "if present", so bodiless is conformant — and it is the shape both legs can agree on. | RFC 7644 §2, §3.12 |
 | X3 | Malformed bearer token → **401** | RFC 7644 §2 |
 | X4 | Expired bearer token → **401** (Release builds; the sample's `#if DEBUG` + development branch deliberately disables lifetime validation for local testing) | RFC 7644 §2 |
 | X5 | Success responses carry `Content-Type: application/scim+json` | RFC 7644 §3.1 |
@@ -479,9 +479,16 @@ test script at all. Its `Get Token` request targets Entra, not the sample's toke
 
 | 5 — `tests/integration`, run per leg | the rows above that can be observed over HTTP, plus the Edupass conformance suite | anything needing a live Edupass endpoint, and the FIMS-internal half of the test plan |
 
+| 6 — the Microsoft Entra SCIM Validator against a tunnelled sample host | the payload shapes Entra ID actually sends, which is what no row here was written from | everything outside its 31 tests — and it can itself be wrong, see `entra-scim-validator.md` §5 |
+
 Oracle 5 is the one that runs on demand: `pnpm test` for net10.0 and `pnpm run test:net48` for
-net48, against sample hosts the harness starts itself. Oracles 1 and 3 remain manual. Read them
-together, not individually.
+net48, against sample hosts the harness starts itself. Oracles 1, 3 and 6 remain manual. Read
+them together, not individually.
+
+Oracle 6 is the only one written by a third party. It found five defects that oracles 1–5 had
+all missed, because it sends operation shapes nobody here had thought to write down — most
+importantly a PATCH `add`/`replace` carrying no `path`. Its result of record, the method, and
+the defects are in [`entra-scim-validator.md`](entra-scim-validator.md).
 
 ### Status of oracle 1 as of the port
 
