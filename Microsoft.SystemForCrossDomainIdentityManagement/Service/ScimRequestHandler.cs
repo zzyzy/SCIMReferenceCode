@@ -161,9 +161,15 @@ namespace Microsoft.SCIM
 
         private static string ComposeReference(Uri baseResource, string path, string identifier)
         {
-            string prefix = baseResource.AbsoluteUri.TrimEnd('/');
+            // GetBaseResourceIdentifier strips the SCIM interface segment, so it has to be put
+            // back. meta.location goes through ProtocolExtensions.ComposeTypeIdentifier, which
+            // does the same - omitting it here produced references that 404 while the
+            // location beside them resolved.
+            string origin = baseResource.AbsoluteUri.TrimEnd('/');
             return
-                prefix
+                origin
+                + ServiceConstants.SeparatorSegments
+                + ScimPath.Prefix
                 + ServiceConstants.SeparatorSegments
                 + path
                 + ServiceConstants.SeparatorSegments

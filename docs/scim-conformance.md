@@ -344,6 +344,25 @@ against the `netcoreapp3.1` build should expect exactly these differences and no
     reference got success and a group that had silently dropped it. `OperationValue` now carries
     all four and the members path preserves them. Covered by `groups.spec.ts`.
 
+24. **Every `$ref` the service composes now carries the SCIM path prefix.** `EnsureReferences`
+    built a cross-reference as `origin + "/Users/{id}"`, while `meta.location` beside it went
+    through `ProtocolExtensions.ComposeTypeIdentifier`, which inserts `ScimPath.Prefix`. So on a
+    default host `meta.location` was `http://host/scim/Users/{id}` and every `groups[].$ref` and
+    `members[].$ref` was `http://host/Users/{id}` — a reference that 404s, which is worse than
+    no reference at all, because it tells the client the resource is fetchable. A reference the
+    provider or the client supplied is still left alone. Covered by
+    `edupass-conformance.spec.ts`, which now fetches the reference as given rather than
+    rebuilding it against a known-good base — the rebuild is what let this survive: it repaired
+    the URI before asserting on it, and the neighbouring `toContain("/Users/{id}")` assertions
+    matched the broken value too.
+
+25. **A Group with no members serializes `members: []` rather than omitting it.**
+    `GroupBase.Members` was left uninitialized with `EmitDefaultValue = false`, so a group kept
+    the attribute out of its create response and out of every read until its membership was
+    first written — after which an emptied group correctly returned `[]`. `members` is
+    advertised `returned: default`, and the two answers differ: absent reads as "this service
+    does not report membership", empty as "this group has none".
+
 24. **Removing a member is case-insensitive, as adding already was.** The removal built its
     lookup with the default comparer while add, and the membership projection, used
     `OrdinalIgnoreCase`. A member added under one casing could not be removed under another.

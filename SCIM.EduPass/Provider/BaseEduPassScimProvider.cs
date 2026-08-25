@@ -4,6 +4,7 @@ namespace Scim.EduPass
 {
     using System;
     using System.Collections.Generic;
+    using System.Globalization;
     using System.Linq;
     using System.Net;
     using System.Threading.Tasks;
@@ -250,7 +251,7 @@ namespace Scim.EduPass
                 throw new ArgumentException(nameof(parameters));
             }
 
-            IFilter filter = parameters.AlternateFilters.SingleOrDefault();
+            IFilter filter = BaseEduPassScimProvider.RequireAtMostOneFilter(parameters.AlternateFilters);
 
             using (IEduPassStore store = await this.BeginAsync().ConfigureAwait(false))
             {
@@ -376,17 +377,7 @@ namespace Scim.EduPass
                             throw new HttpResponseException(HttpStatusCode.NotFound);
                         }
 
-                        Core2Group duplicateGroup =
-                            await store.FindGroupByDisplayNameAsync(group.DisplayName).ConfigureAwait(false);
-
-                        if (null != duplicateGroup
-                            && !string.Equals(
-                                    duplicateGroup.Identifier,
-                                    group.Identifier,
-                                    StringComparison.OrdinalIgnoreCase))
-                        {
-                            throw new HttpResponseException(HttpStatusCode.Conflict);
-                        }
+                        BaseEduPassScimProvider.RequireUnchangedDisplayName(replacedGroup, group);
 
                         await BaseEduPassScimProvider.RequireResolvableMembersAsync(store, group).ConfigureAwait(false);
 
@@ -455,18 +446,10 @@ namespace Scim.EduPass
                     Core2Group patchedGroup = ResourceCloner.Clone(group);
                     patchedGroup.Apply(request);
                     BaseEduPassScimProvider.RequireDisplayName(patchedGroup);
+                    BaseEduPassScimProvider.RequireUnchangedDisplayName(group, patchedGroup);
                     await BaseEduPassScimProvider
                         .RequireResolvableMembersAsync(store, patchedGroup)
                         .ConfigureAwait(false);
-
-                    Core2Group duplicate =
-                        await store.FindGroupByDisplayNameAsync(patchedGroup.DisplayName).ConfigureAwait(false);
-
-                    if (null != duplicate
-                        && !string.Equals(duplicate.Identifier, identifier, StringComparison.OrdinalIgnoreCase))
-                    {
-                        throw new HttpResponseException(HttpStatusCode.Conflict);
-                    }
 
                     patchedGroup.Metadata.Created = group.Metadata.Created;
                     patchedGroup.Metadata.LastModified = DateTime.UtcNow;
@@ -590,6 +573,36 @@ namespace Scim.EduPass
             }
         }
 
+        /// <summary>
+        /// Refuses a write that would change an existing Group's <c>displayName</c>.
+        /// </summary>
+        /// <remarks>
+        /// <c>displayName</c> is the application role, and <see cref="EduPassTypeSchemes"/>
+        /// advertises it as <c>immutable</c>. Edupass creates a Group per role and deletes it
+        /// when the role is deprecated; it never renames one. Enforcing it here is what keeps
+        /// the advertisement honest - a client that read <c>/Schemas</c> and believed it would
+        /// otherwise find the name changing underneath it.
+        ///
+        /// Ordinal, because the attribute is also advertised <c>caseExact</c>: a change of case
+        /// is a change.
+        /// </remarks>
+        private static void RequireUnchangedDisplayName(Core2Group existing, Core2Group candidate)
+        {
+            if (string.Equals(existing.DisplayName, candidate.DisplayName, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            throw new ScimTypedException(
+                HttpStatusCode.BadRequest,
+                ScimTypes.Mutability,
+                string.Format(
+                    CultureInfo.InvariantCulture,
+                    "The attribute 'displayName' is immutable and cannot be changed from '{0}' to '{1}'.",
+                    existing.DisplayName,
+                    candidate.DisplayName));
+        }
+
         private static string RequireIdentifier(IResourceIdentifier resourceIdentifier)
         {
             if (string.IsNullOrWhiteSpace(resourceIdentifier?.Identifier))
@@ -598,6 +611,39 @@ namespace Scim.EduPass
             }
 
             return resourceIdentifier.Identifier;
+        }
+
+        /// <summary>
+        /// Reduces the parsed filter to the single equality comparison Edupass sends, refusing
+        /// anything this provider cannot evaluate in full.
+        /// </summary>
+        /// <remarks>
+        /// Edupass only ever filters on <c>userName eq</c> or <c>displayName eq</c>, so a
+        /// single comparison is all this provider implements. What it must not do is accept a
+        /// filter it only partly understands: taking the first comparison of
+        /// <c>userName eq "x" and title eq "y"</c> and ignoring the rest returns a resource
+        /// that does not match what was asked for, and the caller has no way to tell.
+        /// A narrower answer than requested is a wrong answer, so it is refused instead.
+        /// </remarks>
+        private static IFilter RequireAtMostOneFilter(IReadOnlyCollection<IFilter> filters)
+        {
+            if (null == filters || 0 == filters.Count)
+            {
+                return null;
+            }
+
+            IFilter filter = filters.First();
+
+            // More than one alternate is an "or"; a chained AdditionalFilter is an "and".
+            if (filters.Count > 1 || null != filter.AdditionalFilter)
+            {
+                throw new ScimTypedException(
+                    HttpStatusCode.BadRequest,
+                    ScimTypes.InvalidFilter,
+                    "This endpoint supports a single 'eq' comparison on one attribute.");
+            }
+
+            return filter;
         }
 
         private static string RequireEqualityFilter(IFilter filter)

@@ -74,12 +74,15 @@ algorithm the key material supports, which is what an algorithm-substitution att
 a token signed with HS256 using the published public key as the shared secret. Both legs are
 tested against exactly that attack.
 
-**One asymmetry to be aware of.** On ASP.NET Core, `RefreshOnIssuerKeyNotFound` re-fetches the
-key set the first time a token arrives with an unrecognised `kid`, which is the rotation
-behaviour the specification asks for. OWIN's JWT middleware does not report *why* validation
-failed, so the net48 leg cannot do the same; it relies on `AutomaticRefreshInterval` instead.
-Set that interval shorter than the window Edupass allows between publishing a key and signing
-with it, or put a validating gateway in front.
+**Key rotation on both legs.** On ASP.NET Core, `RefreshOnIssuerKeyNotFound` re-fetches the key
+set the first time a token arrives with an unrecognised `kid`, which is the rotation behaviour
+the specification asks for. The OWIN *middleware* does not report why validation failed, but
+the token format it wraps does — an unknown `kid` surfaces as
+`SecurityTokenSignatureKeyNotFoundException` — so `RefreshingJwtFormat` catches exactly that
+one exception, calls `RequestRefresh()` and validates once more. Only that exception: retrying
+on a bad signature would turn every forged token into a request to Edupass. Once, not in a
+loop, so a token naming a key that genuinely does not exist fails rather than spins.
+`AutomaticRefreshInterval` remains the backstop on both legs.
 
 ### The API key mode
 
@@ -295,12 +298,30 @@ live in the shared library, and all four are easy to miss because nothing fails 
 - **A membership naming an unknown user is refused**, not stored. Accepting it means returning a
   dangling reference on the next read.
 - **A duplicate Group `displayName` is a 409.** `displayName` *is* the application role.
+- **An existing Group's `displayName` never changes.** Edupass creates a Group per role and
+  deletes it when the role is deprecated; it never renames one, and the specification's
+  `/Schemas` payload declares the attribute `immutable`. `BaseEduPassScimProvider` refuses a
+  `PATCH` or `PUT` that would change it, with 400 `scimType` `mutability`, so what
+  `EduPassTypeSchemes` advertises is what the endpoint enforces. **This is a behaviour change:**
+  a rename previously succeeded, or answered 409 when it collided with another group's name.
+  Ordinal comparison, because the attribute is also advertised `caseExact` — a change of case is
+  a change.
 
 The cheapest way to get the first three right is not to enforce them at all: hold membership in
 one place — on the group — and derive the user's `groups` from it on read. Then they cannot
 disagree, and deleting either side is the removal. That is what `InMemoryEduPassProvider` does,
 and why its `groups` projection and its delete paths are three lines each rather than
 bookkeeping you have to remember at every write.
+
+### Refuse a filter you only partly understand
+
+Edupass filters on `userName eq` and `displayName eq` and nothing else, so that is all
+`BaseEduPassScimProvider` implements. What it must not do is accept a filter it understands in
+part: taking the first comparison of `userName eq "x" and title eq "y"` and ignoring the rest
+returns a resource that does not match what was asked for, and the caller cannot tell. A
+narrower filter than requested is a wrong answer, not a partial one. An `and` chain or an `or`
+of several comparisons now answers 400 `invalidFilter`. **This is a behaviour change:** such a
+filter previously returned results matching only its first comparison.
 
 ### PATCH must be atomic
 
@@ -427,6 +448,6 @@ All of it runs on both legs: `pnpm test` for net10.0, `pnpm run test:net48` for 
 FIMS-internal expectation in the test plan — UPA creation, user-admin approval, position
 tables, notifications — has no counterpart here and was not exercised. Before onboarding, at
 minimum: run the two Postman collections against both legs, confirm a real Edupass token
-validates and that a rotated `kid` is picked up (see the net48 caveat in section 1), and check
+validates and that a rotated `kid` is picked up on both legs, and check
 the `/Schemas` and `/ResourceTypes` payloads against what Edupass expects for your application
 code.

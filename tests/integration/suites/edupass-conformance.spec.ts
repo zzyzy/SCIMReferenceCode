@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   SCHEMA_GROUP,
   SCHEMA_USER,
+  devToken,
   edupass,
   patchOp,
   unique,
   type ScimResource,
 } from "../src/client.js";
+import { EDUPASS_BASE_URL } from "../src/host.js";
 
 /**
  * The Edupass conformance suite: the interface specification read as a contract.
@@ -275,7 +277,9 @@ describe("Edupass conformance: the groups attribute", () => {
     expect(entries[0]?.value).toBe(group.id);
     expect(entries[0]?.display).toBe(group["displayName"]);
     expect(entries[0]?.$ref, "the groups entry carries no $ref").toBeDefined();
-    expect(entries[0]?.$ref).toContain(`/Groups/${group.id}`);
+    // The whole URI, not toContain: a $ref missing the /scim prefix still contains
+    // "/Groups/{id}", which is how a prefix-less reference passed this for so long.
+    expect(entries[0]?.$ref).toBe(`${EDUPASS_BASE_URL}/Groups/${group.id}`);
   });
 
   it("addresses the group its $ref names", async () => {
@@ -288,9 +292,22 @@ describe("Edupass conformance: the groups attribute", () => {
     const reference = (groupsOf(read.body) ?? [])[0]?.$ref ?? "";
     expect(reference).not.toBe("");
 
-    const fetched = await edupass<ScimResource>("GET", new URL(reference).pathname.replace(/^\/scim/u, ""));
+    // Fetched as given. Rebuilding it against the known-good base - which is what this
+    // did before - repairs the very defect the test exists to catch.
+    const fetched = await fetch(reference, { headers: { Authorization: `Bearer ${devToken()}` } });
     expect(fetched.status).toBe(200);
-    expect(fetched.body.id).toBe(group.id);
+    expect(((await fetched.json()) as ScimResource).id).toBe(group.id);
+  });
+
+  it("agrees with meta.location on the group it names", async () => {
+    const user = await createEduUser();
+    const group = await createEduGroup([{ value: user.id }]);
+
+    const read = await edupass<ScimResource>("GET", `/Users/${user.id}`);
+    const reference = (groupsOf(read.body) ?? [])[0]?.$ref;
+
+    const readGroup = await edupass<ScimResource>("GET", `/Groups/${group.id}`);
+    expect(reference).toBe((readGroup.body["meta"] as { location: string }).location);
   });
 
   it("returns the same groups shape from Get All Users", async () => {
@@ -346,10 +363,12 @@ describe("Edupass conformance: the members attribute", () => {
     const user = await createEduUser();
     const group = await createEduGroup();
 
+    // value only, no $ref: a reference the client supplied is preserved verbatim, so
+    // supplying one would test the echo rather than what the service composes.
     const patched = await edupass("PATCH", `/Groups/${group.id}`, patchOp({
       op: "add",
       path: "members",
-      value: [{ value: user.id, $ref: `http://localhost/scim/Users/${user.id}` }],
+      value: [{ value: user.id }],
     }));
     expect([200, 204]).toContain(patched.status);
 
@@ -359,7 +378,7 @@ describe("Edupass conformance: the members attribute", () => {
     expect(members).toHaveLength(1);
     expect(members[0]?.value).toBe(user.id);
     expect(members[0]?.$ref, "the members entry carries no $ref").toBeDefined();
-    expect(members[0]?.$ref).toContain(`/Users/${user.id}`);
+    expect(members[0]?.$ref).toBe(`${EDUPASS_BASE_URL}/Users/${user.id}`);
   });
 
   it("carries $ref on members supplied at create time", async () => {
@@ -370,7 +389,59 @@ describe("Edupass conformance: the members attribute", () => {
     const members = (read.body["members"] as { value: string; $ref?: string }[]) ?? [];
 
     expect(members).toHaveLength(1);
-    expect(members[0]?.$ref).toContain(`/Users/${user.id}`);
+    expect(members[0]?.$ref).toBe(`${EDUPASS_BASE_URL}/Users/${user.id}`);
+  });
+
+  it("addresses the user its $ref names", async () => {
+    const user = await createEduUser();
+    const group = await createEduGroup([{ value: user.id }]);
+
+    const read = await edupass<ScimResource>("GET", `/Groups/${group.id}`);
+    const reference = (read.body["members"] as { $ref?: string }[])[0]?.$ref ?? "";
+
+    const fetched = await fetch(reference, { headers: { Authorization: `Bearer ${devToken()}` } });
+    expect(fetched.status).toBe(200);
+    expect(((await fetched.json()) as ScimResource).id).toBe(user.id);
+  });
+
+  it("returns members as [] on a group that has none", async () => {
+    // The specification's Create Group response carries "members": [], and /Schemas
+    // advertises members with returned=default. Omitting it says something different:
+    // absent reads as "this service does not report membership", empty as "this group
+    // has none". A group whose membership had never been written omitted it entirely.
+    const group = await createEduGroup();
+    expect(group["members"], "members absent from the create response").toEqual([]);
+
+    const read = await edupass<ScimResource>("GET", `/Groups/${group.id}`);
+    expect(read.body["members"], "members absent from Get Group by ID").toEqual([]);
+
+    const listed = await edupass("GET", "/Groups");
+    const found = (listed.body.Resources as ScimResource[]).find((r) => r.id === group.id);
+    expect(found?.["members"], "members absent from Get All Groups").toEqual([]);
+  });
+
+  it("refuses to rename a group", async () => {
+    // displayName is the application role and is advertised immutable: Edupass creates a
+    // Group per role and deletes it when the role is deprecated, never renaming one.
+    const group = await createEduGroup();
+
+    const patched = await edupass("PATCH", `/Groups/${group.id}`, patchOp({
+      op: "replace",
+      path: "displayName",
+      value: unique("1001_app1_renamed"),
+    }));
+    expect(patched.status).toBe(400);
+    expect(patched.body["scimType"]).toBe("mutability");
+
+    const put = await edupass("PUT", `/Groups/${group.id}`, {
+      ...group,
+      displayName: unique("1001_app1_replaced"),
+    });
+    expect(put.status).toBe(400);
+    expect(put.body["scimType"]).toBe("mutability");
+
+    const read = await edupass<ScimResource>("GET", `/Groups/${group.id}`);
+    expect(read.body["displayName"]).toBe(group["displayName"]);
   });
 
   it("still honours excludedAttributes=members", async () => {

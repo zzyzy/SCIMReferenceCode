@@ -242,8 +242,13 @@ namespace Scim.EduPass
                     Description =
                         "The application role, as <location code>_<app code>_<role code>.",
                     Required = true,
+                    // The role a Group encodes is fixed at creation: Edupass creates a Group per
+                    // role and deletes it when the role is deprecated, never renaming one.
+                    // BaseEduPassScimProvider enforces this, so the advertisement is honest.
+                    Mutability = Mutability.immutable,
                     Uniqueness = Uniqueness.server,
                     Returned = Returned.@default,
+                    CaseExact = true,
                 });
 
             scheme.AddAttribute(
@@ -263,20 +268,28 @@ namespace Scim.EduPass
                     Returned = Returned.@default,
                 };
 
+            // A membership entry is added or removed whole, never edited in place, which is
+            // what immutable means for a multi-valued sub-attribute (RFC 7643 section 7).
             members.AddSubAttribute(
                 new AttributeScheme(AttributeNames.Value, AttributeDataType.@string, plural: false)
                 {
                     Description = "The identifier of the member.",
+                    Mutability = Mutability.immutable,
+                    CaseExact = true,
                 });
             members.AddSubAttribute(
                 new AttributeScheme(AttributeNames.Reference, AttributeDataType.reference, plural: false)
                 {
                     Description = "The URI of the member.",
+                    Mutability = Mutability.immutable,
+                    CaseExact = true,
                 });
             members.AddSubAttribute(
                 new AttributeScheme(AttributeNames.Display, AttributeDataType.@string, plural: false)
                 {
                     Description = "The display name of the member.",
+                    Mutability = Mutability.immutable,
+                    CaseExact = true,
                 });
 
             scheme.AddAttribute(members);
@@ -308,6 +321,7 @@ namespace Scim.EduPass
                 {
                     Description = "The identifier of the group.",
                     Mutability = Mutability.readOnly,
+                    CaseExact = true,
                 });
 
             scheme.AddSubAttribute(
@@ -315,6 +329,7 @@ namespace Scim.EduPass
                 {
                     Description = "The URI of the group.",
                     Mutability = Mutability.readOnly,
+                    CaseExact = true,
                 });
 
             scheme.AddSubAttribute(
@@ -322,6 +337,7 @@ namespace Scim.EduPass
                 {
                     Description = "The display name of the group.",
                     Mutability = Mutability.readOnly,
+                    CaseExact = true,
                 });
 
             return scheme;

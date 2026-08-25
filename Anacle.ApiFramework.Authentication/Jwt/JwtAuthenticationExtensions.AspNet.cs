@@ -11,6 +11,7 @@ namespace Anacle.ApiFramework.Authentication.Jwt
     using Microsoft.IdentityModel.Protocols;
     using Microsoft.IdentityModel.Protocols.OpenIdConnect;
     using Microsoft.IdentityModel.Tokens;
+    using Microsoft.Owin.Security;
     using Microsoft.Owin.Security.Jwt;
     using Microsoft.Owin.Security.OAuth;
     using Owin;
@@ -25,12 +26,11 @@ namespace Anacle.ApiFramework.Authentication.Jwt
     /// <c>ConfigurationManager</c> underneath, so caching, background refresh and
     /// last-known-good behaviour match the other leg rather than being reimplemented.
     ///
-    /// One difference remains and it matters. OWIN does not report that validation failed
-    /// because of an unrecognised key identifier, so there is no equivalent of
-    /// <c>RefreshOnIssuerKeyNotFound</c>. Rotation is handled instead by returning every
-    /// currently published key and letting <c>AutomaticRefreshInterval</c> pick up new ones -
-    /// so set that interval shorter than the window the authority allows between publishing a
-    /// key and signing with it.
+    /// The OWIN middleware itself does not report <i>why</i> validation failed, but the token
+    /// format it wraps does: an unrecognised key identifier surfaces as
+    /// <see cref="SecurityTokenSignatureKeyNotFoundException"/>. <see cref="RefreshingJwtFormat"/>
+    /// catches exactly that and re-fetches, which is the <c>RefreshOnIssuerKeyNotFound</c>
+    /// behaviour the other leg gets from <c>JwtBearerOptions</c>.
     /// </remarks>
     public class JsonWebKeySetIssuerSecurityKeyProvider : IIssuerSecurityKeyProvider
     {
@@ -83,6 +83,60 @@ namespace Anacle.ApiFramework.Authentication.Jwt
     }
 
     /// <summary>
+    /// Re-fetches the key set when a token names a key identifier the cache does not hold,
+    /// then validates once more.
+    /// </summary>
+    /// <remarks>
+    /// The authority rotates its signing keys: a new key appears at the key set endpoint with
+    /// a new <c>kid</c>, and tokens start naming it. A cache that only refreshes on a timer
+    /// rejects every token signed with the new key until the timer happens to fire, which is an
+    /// outage of up to that interval on each rotation.
+    ///
+    /// <c>JwtFormat</c> throws <see cref="SecurityTokenSignatureKeyNotFoundException"/> for
+    /// precisely this case - no key matched, as distinct from a key matched and the signature
+    /// was wrong. Retrying on any other failure would turn a bad signature into a request to
+    /// the authority, which is a denial-of-service amplifier, so only this one is caught.
+    ///
+    /// Once, not in a loop: <c>ConfigurationManager.RequestRefresh</c> is rate-limited
+    /// internally, and a token naming a key that genuinely does not exist must fail rather
+    /// than spin.
+    /// </remarks>
+    internal sealed class RefreshingJwtFormat : ISecureDataFormat<AuthenticationTicket>
+    {
+        private readonly ISecureDataFormat<AuthenticationTicket> inner;
+        private readonly JsonWebKeySetIssuerSecurityKeyProvider keyProvider;
+
+        public RefreshingJwtFormat(
+            ISecureDataFormat<AuthenticationTicket> inner,
+            JsonWebKeySetIssuerSecurityKeyProvider keyProvider)
+        {
+            this.inner = inner ?? throw new ArgumentNullException(nameof(inner));
+            this.keyProvider = keyProvider ?? throw new ArgumentNullException(nameof(keyProvider));
+        }
+
+        public AuthenticationTicket Unprotect(string protectedText)
+        {
+            try
+            {
+                return this.inner.Unprotect(protectedText);
+            }
+            catch (SecurityTokenSignatureKeyNotFoundException)
+            {
+                this.keyProvider.RequestRefresh();
+                return this.inner.Unprotect(protectedText);
+            }
+        }
+
+        /// <summary>
+        /// Not supported. This format validates inbound tokens; it does not mint them.
+        /// </summary>
+        public string Protect(AuthenticationTicket data)
+        {
+            throw new NotSupportedException();
+        }
+    }
+
+    /// <summary>
     /// Wires JWKS-backed bearer token validation into an OWIN pipeline.
     /// </summary>
     public static class JwtAuthenticationExtensions
@@ -120,7 +174,10 @@ namespace Anacle.ApiFramework.Authentication.Jwt
             app.UseOAuthBearerAuthentication(
                 new OAuthBearerAuthenticationOptions
                 {
-                    AccessTokenFormat = new JwtFormat(validationParameters, keyProvider),
+                    AccessTokenFormat =
+                        new RefreshingJwtFormat(
+                            new JwtFormat(validationParameters, keyProvider),
+                            keyProvider),
                 });
 
             return app;
