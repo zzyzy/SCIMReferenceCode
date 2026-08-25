@@ -1,4 +1,4 @@
-﻿# SCIM integration tests
+# SCIM integration tests
 
 Vitest + `fetch` + TypeScript, run against a live sample host. No mocks: every test
 sends real HTTP to a real process, which is the only way most of what these cover
@@ -115,8 +115,40 @@ collected alongside.
 | `suites/robustness.spec.ts` | hostile input, concurrency, a soak |
 | `suites/edupass.spec.ts` | the Edupass specification at a party that does not store UIN/FIN |
 | `suites/edupass-uinfin.spec.ts` | the same at a party that does |
+| `suites/edupass-test-plan.spec.ts` | the 25 numbered cases of `test-plan.xlsx`, and the CSV they produce |
 | `suites/unimplemented.spec.ts` | what a provider that implements nothing answers |
 | `suites/faulty-provider.spec.ts` | what a provider that throws answers |
+
+## The Edupass test plan
+
+`suites/edupass-test-plan.spec.ts` runs the 25 cases of `test-plan.xlsx` against the Edupass
+host and writes them back out as `edupass-test-plan-results.<leg>.csv` at the repository root
+— one per leg, since the leg is what the run was against:
+
+| S/N | Datetime | Input | Output | Status | Remarks |
+|---|---|---|---|---|---|
+
+Input and Output keep the plan's own layout — the request line, then the body indented under
+it — so a row here reads next to a row in the plan's execution sheet without translation. They
+are the run's actual traffic: every request a case makes goes through `src/test-plan-recorder.ts`,
+which records it and returns the response to the case.
+
+**The plan is written for FIMS, and much of it is not SCIM.** A UPA created and routed to a
+user admin, positions added or overwritten on approval, a user banned or unbanned, a
+notification triggered — none of that is visible at this endpoint, because the relying party
+does it after the call returns. Each case therefore asserts the protocol half and records the
+FIMS half in Remarks, so a row that says Pass says what it passed.
+
+Two mappings the cases make explicit, because the plan leaves them implicit:
+
+- **A Location is a Group** whose `displayName` encodes the location code, as the plan's own
+  sample data shows (`1001_app1_admin`). Adding a user to a location is adding them to that
+  group.
+- **`groups` is read-only on the User.** Cases 12–14 and 18–20 ask for a location change
+  through `PATCH /Users`, and RFC 7643 4.1.2 makes that impossible: membership is written on
+  the Group and derived onto the User. Those cases assert the `400 invalidPath` and record what
+  Edupass should send instead. They also check the refusal changed nothing — a rejected patch
+  that had dropped the old location would be the worst outcome.
 
 ## Two things worth knowing before changing these
 

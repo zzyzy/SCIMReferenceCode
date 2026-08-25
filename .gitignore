@@ -343,3 +343,7 @@ Log/
 # Integration tests (tests/integration)
 node_modules/
 integration-coverage.xml
+
+# Written by the Edupass test-plan suite, one per hosting leg. A run's output, not a
+# source file: it carries the identifiers and bodies that run generated.
+edupass-test-plan-results.*.csv
