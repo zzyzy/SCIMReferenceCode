@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
+﻿// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
 
 namespace Microsoft.SCIM
 {
@@ -94,6 +94,12 @@ namespace Microsoft.SCIM
 
                 throw new HttpResponseException(HttpStatusCode.NotImplemented);
             }
+            catch (HttpResponseException)
+            {
+                // The thrown status is the answer; this method throws one itself. Without
+                // this the generic catch below would rewrite it.
+                throw;
+            }
             catch (Exception exception)
             {
                 this.Logger.LogScimFailure(
@@ -101,7 +107,12 @@ namespace Microsoft.SCIM
                     exception,
                     correlationIdentifier);
 
-                throw;
+                // A SCIM error body, as the query and replace handlers already answer for
+                // the same exception. Rethrowing let a provider's exception out of the SCIM
+                // layer, where the host decided what to do with it - a plain-text stack trace
+                // under the developer exception page, an empty 500 without it, and something
+                // different again on the other hosting leg.
+                return ScimResult.Error(HttpStatusCode.InternalServerError, exception.Message);
             }
         }
 
@@ -159,6 +170,12 @@ namespace Microsoft.SCIM
 
                 throw new HttpResponseException(HttpStatusCode.NotImplemented);
             }
+            catch (HttpResponseException)
+            {
+                // The thrown status is the answer; this method throws one itself. Without
+                // this the generic catch below would rewrite it.
+                throw;
+            }
             catch (Exception exception)
             {
                 this.Logger.LogScimFailure(
@@ -166,7 +183,12 @@ namespace Microsoft.SCIM
                     exception,
                     correlationIdentifier);
 
-                throw;
+                // A SCIM error body, as the query and replace handlers already answer for
+                // the same exception. Rethrowing let a provider's exception out of the SCIM
+                // layer, where the host decided what to do with it - a plain-text stack trace
+                // under the developer exception page, an empty 500 without it, and something
+                // different again on the other hosting leg.
+                return ScimResult.Error(HttpStatusCode.InternalServerError, exception.Message);
             }
         }
 
@@ -218,6 +240,12 @@ namespace Microsoft.SCIM
 
                 throw new HttpResponseException(HttpStatusCode.NotImplemented);
             }
+            catch (HttpResponseException)
+            {
+                // The thrown status is the answer; this method throws one itself. Without
+                // this the generic catch below would rewrite it.
+                throw;
+            }
             catch (Exception exception)
             {
                 this.Logger.LogScimFailure(
@@ -225,7 +253,12 @@ namespace Microsoft.SCIM
                     exception,
                     correlationIdentifier);
 
-                throw;
+                // A SCIM error body, as the query and replace handlers already answer for
+                // the same exception. Rethrowing let a provider's exception out of the SCIM
+                // layer, where the host decided what to do with it - a plain-text stack trace
+                // under the developer exception page, an empty 500 without it, and something
+                // different again on the other hosting leg.
+                return ScimResult.Error(HttpStatusCode.InternalServerError, exception.Message);
             }
         }
 
@@ -284,6 +317,13 @@ namespace Microsoft.SCIM
 
                 throw new HttpResponseException(HttpStatusCode.NotImplemented);
             }
+            catch (HttpResponseException)
+            {
+                // The thrown status is the answer, and this method throws one itself for a
+                // body it could not read. Without this the generic catch below turned that
+                // deliberate 400 into a 500.
+                throw;
+            }
             catch (Exception exception)
             {
                 this.Logger.LogScimFailure(
@@ -291,7 +331,12 @@ namespace Microsoft.SCIM
                     exception,
                     correlationIdentifier);
 
-                throw;
+                // A SCIM error body, as the query and replace handlers already answer for
+                // the same exception. Rethrowing let a provider's exception out of the SCIM
+                // layer, where the host decided what to do with it - a plain-text stack trace
+                // under the developer exception page, an empty 500 without it, and something
+                // different again on the other hosting leg.
+                return ScimResult.Error(HttpStatusCode.InternalServerError, exception.Message);
             }
         }
     }

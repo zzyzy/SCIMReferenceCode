@@ -171,7 +171,12 @@ namespace Microsoft.SCIM
                     exception,
                     correlationIdentifier);
 
-                throw;
+                // A SCIM error body, as the query and replace handlers already answer for
+                // the same exception. Rethrowing let a provider's exception out of the SCIM
+                // layer, where the host decided what to do with it - a plain-text stack trace
+                // under the developer exception page, an empty 500 without it, and something
+                // different again on the other hosting leg.
+                return ScimResult.Error(HttpStatusCode.InternalServerError, exception.Message);
             }
         }
 
@@ -505,7 +510,12 @@ namespace Microsoft.SCIM
                     exception,
                     correlationIdentifier);
 
-                throw;
+                // A SCIM error body, as the query and replace handlers already answer for
+                // the same exception. Rethrowing let a provider's exception out of the SCIM
+                // layer, where the host decided what to do with it - a plain-text stack trace
+                // under the developer exception page, an empty 500 without it, and something
+                // different again on the other hosting leg.
+                return ScimResult.Error(HttpStatusCode.InternalServerError, exception.Message);
             }
         }
 
@@ -642,7 +652,12 @@ namespace Microsoft.SCIM
                     exception,
                     correlationIdentifier);
 
-                throw;
+                // A SCIM error body, as the query and replace handlers already answer for
+                // the same exception. Rethrowing let a provider's exception out of the SCIM
+                // layer, where the host decided what to do with it - a plain-text stack trace
+                // under the developer exception page, an empty 500 without it, and something
+                // different again on the other hosting leg.
+                return ScimResult.Error(HttpStatusCode.InternalServerError, exception.Message);
             }
         }
 
@@ -732,7 +747,11 @@ namespace Microsoft.SCIM
                     notSupportedException,
                     correlationIdentifier);
 
-                return ScimResult.Error(HttpStatusCode.BadRequest, notSupportedException.Message);
+                // 501, as POST, GET, PATCH and DELETE all answer for the same exception.
+                // ProviderBase's own replace throws it, so a provider that has not written
+                // one was telling the client its request was malformed - which it was not,
+                // and which a client cannot usefully retry.
+                return ScimResult.Error(HttpStatusCode.NotImplemented, notSupportedException.Message);
             }
             catch (HttpResponseException httpResponseException)
             {
