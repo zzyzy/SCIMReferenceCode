@@ -28,13 +28,17 @@ namespace Anacle.ApiFramework.Authentication.ApiKey
     /// </remarks>
     public class ApiKeyAuthenticationMiddleware : OwinMiddleware
     {
+        private const string HeaderNameChallenge = "WWW-Authenticate";
+
         private readonly IApiKeyStore store;
         private readonly string headerName;
+        private readonly string headerScheme;
 
         public ApiKeyAuthenticationMiddleware(
             OwinMiddleware next,
             IApiKeyStore store,
-            string headerName)
+            string headerName,
+            string headerScheme)
             : base(next)
         {
             if (null == store)
@@ -49,6 +53,7 @@ namespace Anacle.ApiFramework.Authentication.ApiKey
 
             this.store = store;
             this.headerName = headerName;
+            this.headerScheme = headerScheme;
         }
 
         public override async Task Invoke(IOwinContext context)
@@ -58,13 +63,23 @@ namespace Anacle.ApiFramework.Authentication.ApiKey
                 throw new ArgumentNullException(nameof(context));
             }
 
+            // RFC 7235 section 4.1: a 401 has to name the scheme the client should present.
+            // Registered before the pipeline runs because this middleware is passive - the 401
+            // is produced downstream, by whatever authorises against the principal set here.
+            context.Response.OnSendingHeaders(
+                (object state) =>
+                    ApiKeyAuthenticationMiddleware.Challenge(
+                        (IOwinContext)state,
+                        this.headerScheme),
+                context);
+
             string presented = context.Request.Headers.Get(this.headerName);
 
-            if (!string.IsNullOrWhiteSpace(presented))
+            if (ApiKeyCredential.TryRead(presented, this.headerScheme, out string key))
             {
                 ApiKeyIdentity identity =
                     await this.store
-                        .ResolveAsync(presented, CancellationToken.None)
+                        .ResolveAsync(key, CancellationToken.None)
                         .ConfigureAwait(false);
 
                 if (null != identity)
@@ -88,6 +103,30 @@ namespace Anacle.ApiFramework.Authentication.ApiKey
 
             await this.Next.Invoke(context).ConfigureAwait(false);
         }
+
+        /// <summary>
+        /// Adds the challenge to a 401 that has none.
+        /// </summary>
+        /// <remarks>
+        /// Only when the response carries none already, so that a pipeline where another
+        /// authentication middleware has issued its own challenge is left alone.
+        /// </remarks>
+        private static void Challenge(IOwinContext context, string headerScheme)
+        {
+            if (401 != context.Response.StatusCode)
+            {
+                return;
+            }
+
+            if (!string.IsNullOrEmpty(context.Response.Headers.Get(ApiKeyAuthenticationMiddleware.HeaderNameChallenge)))
+            {
+                return;
+            }
+
+            context.Response.Headers.Set(
+                ApiKeyAuthenticationMiddleware.HeaderNameChallenge,
+                ApiKeyCredential.ChallengeScheme(headerScheme));
+        }
     }
 
     /// <summary>
@@ -98,10 +137,17 @@ namespace Anacle.ApiFramework.Authentication.ApiKey
         /// <summary>
         /// Adds API key authentication. Call before the protected endpoints run.
         /// </summary>
+        /// <param name="headerName">The header the key is read from.</param>
+        /// <param name="headerScheme">
+        /// The RFC 7235 auth-scheme the header value carries, for a key presented as
+        /// <c>Authorization: Bearer &lt;key&gt;</c>. Null - the default - means the whole
+        /// header value is the key.
+        /// </param>
         public static IAppBuilder UseApiKeyAuthentication(
             this IAppBuilder app,
             IApiKeyStore store,
-            string headerName = ApiKeyAuthenticationDefaults.HeaderName)
+            string headerName = ApiKeyAuthenticationDefaults.HeaderName,
+            string headerScheme = null)
         {
             if (null == app)
             {
@@ -113,7 +159,7 @@ namespace Anacle.ApiFramework.Authentication.ApiKey
                 throw new ArgumentNullException(nameof(store));
             }
 
-            return app.Use<ApiKeyAuthenticationMiddleware>(store, headerName);
+            return app.Use<ApiKeyAuthenticationMiddleware>(store, headerName, headerScheme);
         }
     }
 }

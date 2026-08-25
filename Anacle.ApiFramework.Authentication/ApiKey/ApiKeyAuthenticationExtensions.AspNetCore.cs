@@ -27,6 +27,20 @@ namespace Anacle.ApiFramework.Authentication.ApiKey
         } = ApiKeyAuthenticationDefaults.HeaderName;
 
         /// <summary>
+        /// The RFC 7235 auth-scheme <see cref="HeaderName"/> carries, for a key presented as
+        /// <c>Authorization: Bearer &lt;key&gt;</c>.
+        /// </summary>
+        /// <remarks>
+        /// Null - the default - means the whole header value is the key, which is the shape a
+        /// header of the API key's own takes.
+        /// </remarks>
+        public string HeaderScheme
+        {
+            get;
+            set;
+        }
+
+        /// <summary>
         /// Resolves a presented key to a caller. Required.
         /// </summary>
         /// <remarks>
@@ -73,10 +87,10 @@ namespace Anacle.ApiFramework.Authentication.ApiKey
                 return AuthenticateResult.NoResult();
             }
 
-            string presented = values.ToString();
-
-            if (string.IsNullOrWhiteSpace(presented))
+            if (!ApiKeyCredential.TryRead(values.ToString(), this.Options.HeaderScheme, out string presented))
             {
+                // Including a value that does not carry the expected scheme: a bearer token
+                // arriving where an API key is expected is not this scheme's to reject.
                 return AuthenticateResult.NoResult();
             }
 
@@ -114,7 +128,11 @@ namespace Anacle.ApiFramework.Authentication.ApiKey
 
         protected override Task HandleChallengeAsync(AuthenticationProperties properties)
         {
-            this.Response.Headers["WWW-Authenticate"] = this.Options.HeaderName;
+            // The scheme, never the header name: RFC 7235 section 4.1 defines a challenge as an
+            // auth-scheme token, and "WWW-Authenticate: X-Api-Key" - which this sent - names a
+            // header, which no client can act on.
+            this.Response.Headers["WWW-Authenticate"] =
+                ApiKeyCredential.ChallengeScheme(this.Options.HeaderScheme);
             return base.HandleChallengeAsync(properties);
         }
     }
@@ -155,11 +173,18 @@ namespace Anacle.ApiFramework.Authentication.ApiKey
         /// Adds API key authentication as the default scheme, backed by
         /// <paramref name="store"/>.
         /// </summary>
+        /// <param name="headerName">The header the key is read from.</param>
+        /// <param name="headerScheme">
+        /// The RFC 7235 auth-scheme the header value carries, for a key presented as
+        /// <c>Authorization: Bearer &lt;key&gt;</c>. Null - the default - means the whole
+        /// header value is the key.
+        /// </param>
         public static IServiceCollection AddApiKeyAuthentication(
             this IServiceCollection services,
             IApiKeyStore store,
             string headerName = ApiKeyAuthenticationDefaults.HeaderName,
-            string authenticationScheme = ApiKeyAuthenticationDefaults.AuthenticationScheme)
+            string authenticationScheme = ApiKeyAuthenticationDefaults.AuthenticationScheme,
+            string headerScheme = null)
         {
             if (null == services)
             {
@@ -175,6 +200,7 @@ namespace Anacle.ApiFramework.Authentication.ApiKey
             {
                 options.Store = store;
                 options.HeaderName = headerName;
+                options.HeaderScheme = headerScheme;
             }
 
             services

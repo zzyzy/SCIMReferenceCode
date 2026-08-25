@@ -54,8 +54,8 @@ namespace Scim.EduPass
             {
                 services.AddApiKeyAuthentication(
                     settings.ApiKeyStore,
-                    settings.ApiKeyHeaderName,
-                    EduPassAuthentication.ApiKeyScheme);
+                    headerName: settings.ApiKeyHeaderName,
+                    authenticationScheme: EduPassAuthentication.ApiKeyScheme);
             }
 
             if (settings.IsJwtEnabled && settings.IsApiKeyEnabled)
