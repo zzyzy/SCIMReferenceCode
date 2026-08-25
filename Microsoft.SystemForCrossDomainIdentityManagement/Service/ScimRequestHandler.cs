@@ -774,11 +774,14 @@ namespace Microsoft.SCIM
                     correlationIdentifier,
                     request);
 
-                if (httpResponseException.Response.StatusCode == HttpStatusCode.Conflict)
-                {
-                    return ScimResult.Status(HttpStatusCode.Conflict);
-                }
-
+                // No special case for 409. A bare status was returned here, which discarded
+                // the scimType and the detail a provider had chosen - so every conflict on
+                // create read as "uniqueness / Conflict", including the ones that are not
+                // uniqueness violations at all and whose detail said what to do about it.
+                // FromException degrades to exactly that answer when the provider supplied
+                // nothing, so nothing is lost by letting conflicts take the same path as
+                // every other status.
+                //
                 // The status the provider chose, not a blanket 400. A provider is
                 // entitled to answer 403 for a caller its store will not serve, 501 for
                 // an operation it does not offer, or 429 for one it is shedding, and
@@ -916,18 +919,14 @@ namespace Microsoft.SCIM
                     return ScimResult.Error(HttpStatusCode.NotFound, string.Format(SystemForCrossDomainIdentityManagementServiceResources.ResourceNotFoundTemplate, identifier));
                 }
 
-                if (httpResponseException.Response.StatusCode == HttpStatusCode.Conflict)
-                {
-                    return ScimResult.Error(HttpStatusCode.Conflict, SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidRequest);
-                }
-
-                // The status the provider chose. Not the exception's Message, though: an
-                // HttpResponseException thrown for its status alone carries "Exception of
-                // type '...' was thrown.", which is no use as an error detail.
-                return ScimResult.Error(
-                    httpResponseException.Response?.StatusCode ?? HttpStatusCode.BadRequest,
-                    SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidRequest,
-                    (httpResponseException as ScimTypedException)?.ScimType);
+                // The status the provider chose, with the scimType and detail it chose.
+                // Not the exception's Message, though: an HttpResponseException thrown for
+                // its status alone carries "Exception of type '...' was thrown.", which is
+                // no use as an error detail - FromException prefers the typed detail, then
+                // the reason phrase, and never the message. The 409 special case that used
+                // to sit here answered a fixed "invalid request" for every conflict,
+                // throwing away both.
+                return ScimResult.FromException(httpResponseException);
             }
             catch (Exception exception)
             {
