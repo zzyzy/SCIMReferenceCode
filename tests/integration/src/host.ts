@@ -120,6 +120,18 @@ const routeBase = pathPrefix.length === 0 ? "" : `/${pathPrefix}`;
 
 export const BASE_URL = EXTERNAL_BASE_URL ?? `http://localhost:${PORTS[LEG]}${routeBase}`;
 
+/**
+ * The location code the Edupass suites build group displayNames from.
+ *
+ * A displayName is `<location>_<app>_<role>`, and in at least one relying party
+ * membership is scoped to the *location* rather than to the group - so every group on a
+ * location lists every user holding it. A fixed code means each run inherits every group
+ * earlier runs left there, and an assertion that a user holds exactly one role stops
+ * being about the provider at all. Overridable so a run can have a location to itself;
+ * 1001 by default, which is what the Edupass test plan's sample data uses.
+ */
+export const EDUPASS_LOCATION = process.env["SCIM_EDUPASS_LOCATION"] ?? "1001";
+
 export const EDUPASS_BASE_URL =
   EXTERNAL_EDUPASS_BASE_URL ?? `http://localhost:${EDUPASS_PORTS[LEG]}${routeBase}`;
 

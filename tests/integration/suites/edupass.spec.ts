@@ -9,6 +9,7 @@ import {
   unique,
   type ScimResource,
 } from "../src/client.js";
+import { EDUPASS_LOCATION } from "../src/host.js";
 
 /**
  * The Edupass interface specification, driven through the sample host.
@@ -67,7 +68,7 @@ async function createEduUser(overrides: Record<string, unknown> = {}): Promise<S
  * displayName as an opaque string.
  */
 function eduRole(): string {
-  return unique("1001_app1_role");
+  return unique(`${EDUPASS_LOCATION}_app1_role`);
 }
 
 async function createEduGroup(overrides: Record<string, unknown> = {}): Promise<ScimResource> {

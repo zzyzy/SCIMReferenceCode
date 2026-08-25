@@ -173,6 +173,7 @@ collected alongside.
 | `src/client.ts` | the `fetch` wrapper, dev-token minting, per-host send helpers, resource helpers |
 | `src/global-setup.ts` | one set of hosts for the whole run |
 | `coverage.settings.xml` | what the coverage number counts, and why |
+| `SPEC-TRACEABILITY.md` | every clause of the interface specification, core or Edupass, and the test that proves it |
 | `suites/users.spec.ts` | create, read, replace, patch, delete, `externalId` |
 | `suites/groups.spec.ts` | membership, full sync, rename and conflicts |
 | `suites/filters.spec.ts` | the nine operators, projection, pagination |
@@ -187,6 +188,7 @@ collected alongside.
 | `suites/edupass-uinfin.spec.ts` | the same at a party that does |
 | `suites/edupass-test-plan.spec.ts` | the 25 numbered cases of `test-plan.xlsx` and the `RP-` cases of `M2-SCIM RP Testcases`, and the CSV they produce |
 | `suites/edupass-conformance.spec.ts` | the Edupass specification read as a contract - discovery payloads, `groups`, `$ref` |
+| `suites/scim-compliance.spec.ts` | the same specification's core-SCIM clauses, against the core host |
 | `suites/resource-types.spec.ts` | RFC 7643 6 - base schema and `schemaExtensions` |
 | `suites/unimplemented.spec.ts` | what a provider that implements nothing answers |
 | `suites/faulty-provider.spec.ts` | what a provider that throws answers |
@@ -257,6 +259,15 @@ asks whether the response body is the one the specification document actually de
 means the parts the plan never inspects: the `/Schemas` and `/ResourceTypes` payloads, the
 `groups` attribute on every User response that should carry it, and the `$ref` cross-references
 between a User and its Groups.
+
+**The other half of the same document.** `suites/scim-compliance.spec.ts` walks the same
+specification for the clauses RFC 7643/7644 already mandates — the error body's `schemas`,
+string `status` and `scimType`; the list envelope; `count` and `startIndex`; a filter that
+matches nothing answering an empty list rather than a 404; `excludedAttributes=members`; the
+`ServiceProviderConfig`, `/Schemas` and `/ResourceTypes` payloads — and proves them against the
+core host. The two files are the split the goal names: read `scim-compliance` to answer "is this
+service SCIM", read `edupass-conformance` to answer "is this service an Edupass relying party".
+Neither may assert the other's half, and `scim-compliance` may not name Edupass at all.
 
 **Where a finding goes.** Everything in that file is something the Edupass specification
 requires and RFC 7643/7644 does not. A gap that turns out to be the SCIM library's belongs in a

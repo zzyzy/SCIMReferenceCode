@@ -62,6 +62,29 @@ describe("Edupass with UIN/FIN: what the schema advertises", () => {
       expect(names).toContain(expected);
     }
   });
+
+  it("gives uinFin the metadata the specification's extension schema carries", async () => {
+    // The specification prints the extension in full: uinFin is a readWrite,
+    // default-returned, non-unique, optional, case-insensitive string. A party that
+    // advertises it as readOnly has told Edupass not to send the value that the same
+    // document says it will send, and this is the only host that advertises it at all.
+    const response = await edupassUinFin("GET", "/Schemas");
+    const extension = (
+      response.body.Resources as { id: string; attributes?: Record<string, unknown>[] }[]
+    ).find((item) => item.id === EXTENSION);
+
+    const advertised = (extension?.attributes ?? []).find(
+      (attribute) => attribute["name"] === "uinFin",
+    );
+
+    expect(advertised, "the extension does not advertise uinFin").toBeDefined();
+    expect(advertised?.["type"]).toBe("string");
+    expect(advertised?.["multiValued"]).toBe(false);
+    expect(advertised?.["mutability"]).toBe("readWrite");
+    expect(advertised?.["returned"]).toBe("default");
+    expect(advertised?.["uniqueness"]).toBe("none");
+    expect(advertised?.["caseExact"]).toBe(false);
+  });
 });
 
 describe("Edupass with UIN/FIN: what validation requires", () => {

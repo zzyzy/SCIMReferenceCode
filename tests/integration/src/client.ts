@@ -196,21 +196,55 @@ export function patchOp(...operations: Record<string, unknown>[]): Record<string
   return { schemas: [SCHEMA_PATCH], Operations: operations };
 }
 
+/**
+ * The shape a resource has to have before the party under test will accept it at all.
+ *
+ * RFC 7643's canonical values are advisory, so a service is entitled to close them, to
+ * require an attribute the RFC leaves optional, or to give displayName a required
+ * internal structure. A relying party that does all three is still conformant - but the
+ * stock fixtures below then fail at creation, and every case that needed a user reports
+ * a failure that says nothing about what it was testing. Against one such party 297 of
+ * 360 core cases failed on `emails.type` alone.
+ *
+ * These make the fixtures say what the party requires, so the suite tests the behaviour
+ * it is named for rather than the fixture. Defaults are the RFC's own, so a service that
+ * closes nothing is unaffected.
+ */
+export const PROFILE = {
+  /** emails[].type, for a service that closes RFC 7643's canonical set. */
+  emailType: process.env["SCIM_PROFILE_EMAIL_TYPE"] ?? "work",
+  /** Whether externalId is mandatory rather than optional. */
+  requireExternalId: process.env["SCIM_PROFILE_REQUIRE_EXTERNAL_ID"] === "1",
+  /**
+   * A template for a group displayName, where {unique} is substituted. For a service
+   * that requires internal structure - "{location}_{app}_{unique}", say.
+   */
+  groupDisplayName: process.env["SCIM_PROFILE_GROUP_DISPLAYNAME"] ?? "{unique}",
+} as const;
+
 export function userBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   const userName = `${unique("user")}@example.sg`;
-  return {
+  const body: Record<string, unknown> = {
     schemas: [SCHEMA_USER],
     userName,
     active: true,
     title: "Teacher",
     name: { givenName: "Given", familyName: "Family" },
-    emails: [{ value: userName, type: "work", primary: true }],
-    ...overrides,
+    emails: [{ value: userName, type: PROFILE.emailType, primary: true }],
   };
+  if (PROFILE.requireExternalId) {
+    body["externalId"] = unique("external");
+  }
+  return { ...body, ...overrides };
 }
 
 export function groupBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  return { schemas: [SCHEMA_GROUP], displayName: unique("group"), ...overrides };
+  const displayName = PROFILE.groupDisplayName.replace("{unique}", unique("group"));
+  const body: Record<string, unknown> = { schemas: [SCHEMA_GROUP], displayName };
+  if (PROFILE.requireExternalId) {
+    body["externalId"] = unique("external");
+  }
+  return { ...body, ...overrides };
 }
 
 /** Creates a user and fails the test if the service refused it. */

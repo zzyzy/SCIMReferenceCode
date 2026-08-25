@@ -37,7 +37,7 @@ describe("Groups: lifecycle", () => {
     expect((await scim("POST", "/Groups", { schemas: [SCHEMA_GROUP] })).status).toBe(400);
   });
 
-  it("filters by displayName, which Edupass uses to find a role", async () => {
+  it("filters by displayName, which is how a client finds a group it already created", async () => {
     const created = await createGroup();
     const response = await scim(
       "GET",

@@ -8,7 +8,7 @@ import {
   unique,
   type ScimResource,
 } from "../src/client.js";
-import { EDUPASS_BASE_URL } from "../src/host.js";
+import { EDUPASS_BASE_URL, EDUPASS_LOCATION } from "../src/host.js";
 
 /**
  * The Edupass conformance suite: the interface specification read as a contract.
@@ -25,6 +25,12 @@ import { EDUPASS_BASE_URL } from "../src/host.js";
  * RFC 7643/7644 does not. A gap that is really the SCIM library's belongs in the SCIM
  * suites instead - resource-types.spec.ts, groups.spec.ts, protocol.spec.ts - because
  * fixing it there fixes it for every relying party, not only an Edupass one.
+ *
+ * Naming: each describe states what one clause of the specification requires, in a
+ * sentence that stands on its own, rather than carrying the clause's number or its
+ * heading. Both of those are the document's and the document is revised - a name built
+ * on either points at nothing while still reading as though it points somewhere. The
+ * same convention holds in scim-compliance.spec.ts.
  *
  * Served by the host started with SCIM_PROVIDER=edupass.
  */
@@ -111,7 +117,7 @@ async function createEduUser(overrides: Record<string, unknown> = {}): Promise<S
 async function createEduGroup(members?: { value: string }[]): Promise<ScimResource> {
   const response = await edupass<ScimResource>("POST", "/Groups", {
     schemas: [SCHEMA_GROUP],
-    displayName: unique("1001_app1_role"),
+    displayName: unique(`${EDUPASS_LOCATION}_app1_role`),
     externalId: unique("edupass-grp"),
     ...(members === undefined ? {} : { members }),
   });
@@ -135,7 +141,7 @@ function groupsOf(user: ScimResource): GroupsEntry[] | undefined {
 // The response body against what schemas declares
 // ---------------------------------------------------------------------------
 
-describe("Edupass conformance: the declared schemas", () => {
+describe("A response declares every schema whose attributes it carries", () => {
   // "Each URN identifies a schema that defines the structure of the attributes present
   // in the JSON response", and the specification's table of possible values for schemas
   // lists only the core User schema and the Edupass extension. EduPassUser derives from
@@ -169,10 +175,10 @@ describe("Edupass conformance: the declared schemas", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Get All Schemas
+// What the published schemas describe
 // ---------------------------------------------------------------------------
 
-describe("Edupass conformance: Get All Schemas", () => {
+describe("The published schemas describe the identity and role attributes Edupass sends", () => {
   it("advertises the core User schema", async () => {
     // "This should minimally include the core User schema
     // (urn:ietf:params:scim:schemas:core:2.0:User)." Advertising only the Edupass
@@ -257,10 +263,10 @@ describe("Edupass conformance: Get All Schemas", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Get All Resource Types
+// What the published resource types declare
 // ---------------------------------------------------------------------------
 
-describe("Edupass conformance: Get All Resource Types", () => {
+describe("The published resource types declare the identity extension and the role resource", () => {
   it("advertises the Group resource type", async () => {
     // The specification's Get All Resource Types response carries both User and Group.
     // A relying party with Edupass-managed roles serves /Groups, so omitting the entry
@@ -299,7 +305,7 @@ describe("Edupass conformance: Get All Resource Types", () => {
 // The groups attribute on User responses
 // ---------------------------------------------------------------------------
 
-describe("Edupass conformance: the groups attribute", () => {
+describe("A user is returned with the roles it holds, each resolvable to the role resource", () => {
   it("returns groups on the Create User response", async () => {
     // "For RPs with roles returned by Edupass, the groups attribute should be
     // included", and the specification's 201 example carries `"groups": []`. Edupass
@@ -412,7 +418,7 @@ describe("Edupass conformance: the groups attribute", () => {
 // The members attribute on Group responses
 // ---------------------------------------------------------------------------
 
-describe("Edupass conformance: the members attribute", () => {
+describe("A role is returned with the users holding it, each resolvable to the user resource", () => {
   it("carries a resolvable $ref for each member", async () => {
     // Every members entry in the specification's Group examples carries a $ref
     // alongside the value.
@@ -476,30 +482,6 @@ describe("Edupass conformance: the members attribute", () => {
     expect(found?.["members"], "members absent from Get All Groups").toEqual([]);
   });
 
-  it("refuses to rename a group", async () => {
-    // displayName is the application role and is advertised immutable: Edupass creates a
-    // Group per role and deletes it when the role is deprecated, never renaming one.
-    const group = await createEduGroup();
-
-    const patched = await edupass("PATCH", `/Groups/${group.id}`, patchOp({
-      op: "replace",
-      path: "displayName",
-      value: unique("1001_app1_renamed"),
-    }));
-    expect(patched.status).toBe(400);
-    expect(patched.body["scimType"]).toBe("mutability");
-
-    const put = await edupass("PUT", `/Groups/${group.id}`, {
-      ...group,
-      displayName: unique("1001_app1_replaced"),
-    });
-    expect(put.status).toBe(400);
-    expect(put.body["scimType"]).toBe("mutability");
-
-    const read = await edupass<ScimResource>("GET", `/Groups/${group.id}`);
-    expect(read.body["displayName"]).toBe(group["displayName"]);
-  });
-
   it("still honours excludedAttributes=members", async () => {
     // "RPs should implement the excludedAttributes query parameter for GET
     // operations, so that excludedAttributes=members excludes the members attribute."
@@ -514,5 +496,148 @@ describe("Edupass conformance: the members attribute", () => {
     expect(read.status).toBe(200);
     expect(read.body).not.toHaveProperty("members");
     expect(read.body.id).toBe(group.id);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The metadata the extension schema carries
+// ---------------------------------------------------------------------------
+
+describe("The published identity extension declares only the attributes Edupass defines, with the metadata it prints", () => {
+  /** The four sub-attributes the specification's User Schema table defines. */
+  const DEFINED = ["uinFin", "schoolOrHq", "identityType", "identitySource"];
+
+  it("advertises nothing beyond the four sub-attributes the specification defines", async () => {
+    // A party is free to omit one - "the uinFin can be omitted if indicated at
+    // onboarding and in the Get All Schemas endpoint" - but not to invent a fifth,
+    // because Edupass has no way to learn what it means.
+    const extension = await advertisedSchema(EXTENSION);
+
+    for (const name of attributeNames(extension)) {
+      expect(DEFINED, `${name} is not an attribute the specification defines`).toContain(name);
+    }
+  });
+
+  it.each(DEFINED)(
+    "gives %s the metadata the specification's example carries, when it advertises it",
+    async (name) => {
+      // The specification prints the extension schema in full, and every attribute in
+      // it is a readWrite, default-returned, non-unique, optional, case-insensitive
+      // string. A party advertising uinFin as readOnly is telling Edupass it cannot
+      // send the value that the User Schema table says it will send.
+      const extension = await advertisedSchema(EXTENSION);
+      if (!attributeNames(extension).includes(name)) {
+        return;
+      }
+
+      const advertised = attribute(extension, name);
+
+      expect(advertised.type).toBe("string");
+      expect(advertised.multiValued).toBe(false);
+      expect(advertised.mutability).toBe("readWrite");
+      expect(advertised.returned).toBe("default");
+    },
+  );
+
+  it("carries the extension on every User it returns while it declares it required", async () => {
+    // RFC 7643 6: required true means "a resource of this type MUST include this schema
+    // extension". The specification's own schemaExtensions example carries required:
+    // true while its User Schema table marks the extension Optional, and the party
+    // resolves that by accepting a create without one - so the obligation lands on the
+    // response instead. A resource type that declares the extension required and then
+    // returns a User without it contradicts the model a client generated from it.
+    const user = (await advertisedResourceTypes()).find((item) => item.name === "User");
+    const declared = (user?.schemaExtensions ?? []).find((item) => item.schema === EXTENSION);
+    expect(declared, "the User resource type does not declare the extension").toBeDefined();
+    if (declared?.required !== true) {
+      return;
+    }
+
+    const created = await edupass<ScimResource>("POST", "/Users", {
+      schemas: [SCHEMA_USER],
+      userName: `${unique("noext")}@moe.edu.sg`,
+      externalId: unique("edupass-id"),
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.schemas).toContain(EXTENSION);
+    expect(created.body).toHaveProperty(EXTENSION);
+
+    const read = await edupass<ScimResource>("GET", `/Users/${created.body.id}`);
+    expect(read.body.schemas).toContain(EXTENSION);
+    expect(read.body).toHaveProperty(EXTENSION);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// What the Group schema advertises against how the endpoint behaves
+// ---------------------------------------------------------------------------
+
+describe("The published role schema agrees with how the role endpoint behaves", () => {
+  it("refuses to rename a group", async () => {
+    // displayName is the application role and is advertised immutable: Edupass creates a
+    // Group per role and deletes it when the role is deprecated, never renaming one.
+    const group = await createEduGroup();
+
+    const patched = await edupass("PATCH", `/Groups/${group.id}`, patchOp({
+      op: "replace",
+      path: "displayName",
+      value: unique(`${EDUPASS_LOCATION}_app1_renamed`),
+    }));
+    expect(patched.status).toBe(400);
+    expect(patched.body["scimType"]).toBe("mutability");
+
+    const put = await edupass("PUT", `/Groups/${group.id}`, {
+      ...group,
+      displayName: unique(`${EDUPASS_LOCATION}_app1_replaced`),
+    });
+    expect(put.status).toBe(400);
+    expect(put.body["scimType"]).toBe("mutability");
+
+    const read = await edupass<ScimResource>("GET", `/Groups/${group.id}`);
+    expect(read.body["displayName"]).toBe(group["displayName"]);
+  });
+
+  it("advertises a displayName no client may rewrite, which is how it behaves", async () => {
+    // The specification prints displayName as immutable and server-unique. The suite
+    // already proves the endpoint refuses a rename and refuses a duplicate; this is the
+    // other half - that /Schemas says so, so a client can know before it tries.
+    const advertised = attribute(await advertisedSchema(SCHEMA_GROUP), "displayName");
+
+    expect(["immutable", "readOnly"]).toContain(advertised.mutability);
+    expect(advertised.type).toBe("string");
+    expect(advertised.multiValued).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// What ServiceProviderConfig promises Edupass specifically
+// ---------------------------------------------------------------------------
+
+describe("The published configuration promises the behaviours Edupass provisioning depends on", () => {
+  // The specification's Service Provider Configuration table marks three of the seven
+  // members as things Edupass needs, and is explicit that it does not care about the
+  // rest. scim-compliance.spec.ts proves the members are well-formed for any client;
+  // these three are the ones an Edupass onboarding actually reads.
+  it("supports PATCH, which every role assignment goes through", async () => {
+    const response = await edupass("GET", "/ServiceProviderConfig");
+
+    expect(response.status).toBe(200);
+    expect((response.body.patch as { supported: boolean }).supported).toBe(true);
+  });
+
+  it("supports filter, which is how Edupass finds a resource it already created", async () => {
+    const response = await edupass("GET", "/ServiceProviderConfig");
+
+    expect((response.body.filter as { supported: boolean }).supported).toBe(true);
+  });
+
+  it("offers the oauthbearertoken scheme Edupass presents", async () => {
+    // "Edupass requires the oauthbearertoken scheme to be supported." Edupass sends a
+    // signed JWT in the Authorization header and nothing else; a party advertising only
+    // httpbasic has told it there is no way in.
+    const response = await edupass("GET", "/ServiceProviderConfig");
+    const schemes = response.body.authenticationSchemes as { type: string }[];
+
+    expect(schemes.map((scheme) => scheme.type)).toContain("oauthbearertoken");
   });
 });
