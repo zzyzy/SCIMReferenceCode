@@ -23,24 +23,49 @@ controllers and stops there; which mode satisfies it is the host's decision.
 hosting frameworks. It knows nothing about SCIM and does not reference it.
 
 Edupass identifies itself with a short-lived ES256-signed JWT and publishes its signing keys at
-`/.well-known/keys`. There is no API key or shared secret alternative, so an Edupass endpoint
-uses the `Jwt` mode. `SCIM.EduPass` contributes only the issuers, the key set path and the
-algorithm:
+`/.well-known/keys`. There is no API key or shared secret alternative on the Edupass side, so
+Edupass itself always arrives on the `Jwt` mode. `SCIM.EduPass` contributes only the issuers,
+the key set path and the algorithm.
+
+Which modes the endpoint accepts is one switch on `EduPassAuthenticationSettings`. `Modes` is a
+flags enum, so `Jwt`, `ApiKey`, or both may be enabled; both enabled means the two run
+concurrently and a request satisfies either.
 
 ```csharp
-JsonWebKeySetOptions options =
-    EduPassAuthentication.CreateOptions(
-        EduPassAuthentication.PreproductionIssuer,
-        applicationCode: "<your Edupass application code>");
+EduPassAuthenticationSettings settings =
+    new EduPassAuthenticationSettings
+    {
+        Modes = EduPassAuthenticationModes.Jwt | EduPassAuthenticationModes.ApiKey,
+        Issuer = EduPassAuthentication.PreproductionIssuer,
+        ApplicationCode = "<your Edupass application code>",
+        ApiKeyStore = new HashedApiKeyStore(keys),
+    };
 
 // ASP.NET Core
-builder.Services.AddJsonWebKeySetAuthentication(options);
+builder.Services.AddEduPassAuthentication(settings);
 
 // net48 / IIS, in your OWIN Startup
-app.UseJsonWebKeySetAuthentication(options);
+app.UseEduPassAuthentication(settings);
 ```
 
-Both go through `JsonWebKeySetRetriever`, which wraps the key set in an
+`Validate()` runs on wiring: no mode enabled is an error rather than an endpoint that rejects
+everyone, `Jwt` without an application code is an error, and `ApiKey` without a store is an
+error.
+
+On ASP.NET Core, both modes enabled registers a third scheme — `EduPassAuthentication.CombinedScheme`
+— as the default. It forwards on the shape of the request: a request carrying the API key
+header goes to the key scheme, everything else to `Bearer`. Both schemes stay addressable by
+name, so an endpoint can still pin one with `[Authorize(AuthenticationSchemes = ...)]`.
+
+On net48 there is no scheme registry. The two middlewares run in turn, both passive, and
+whichever recognises the request sets the principal; a request that satisfies neither reaches
+the endpoint anonymous for `[Authorize]` to reject. Per-endpoint mode selection is not available
+on that leg.
+
+Wiring a single mode directly still works — `AddJsonWebKeySetAuthentication(options)` /
+`UseJsonWebKeySetAuthentication(options)` with `EduPassAuthentication.CreateOptions(...)`.
+
+The bearer leg on both frameworks goes through `JsonWebKeySetRetriever`, which wraps the key set in an
 `OpenIdConnectConfiguration` so that `ConfigurationManager` can be used — bringing caching,
 background refresh and last-known-good handling rather than a hand-rolled key cache.
 
@@ -56,13 +81,12 @@ failed, so the net48 leg cannot do the same; it relies on `AutomaticRefreshInter
 Set that interval shorter than the window Edupass allows between publishing a key and signing
 with it, or put a validating gateway in front.
 
-### The other mode
+### The API key mode
 
 `Anacle.ApiFramework.Authentication.ApiKey` reads a key from a request header — `X-Api-Key` by
-default — and resolves it through an `IApiKeyStore` you implement. It does not apply to Edupass,
-which has no key-based option; it is there for a relying party's *other* callers, such as an
-internal admin tool or a monitoring probe. On ASP.NET Core it is a real authentication scheme, so
-it can sit alongside the Edupass JWT scheme with each protecting different endpoints.
+default, `ApiKeyHeaderName` to change it — and resolves it through an `IApiKeyStore` you
+implement. Edupass never uses it; it is there for a relying party's *other* callers, such as an
+internal admin tool or a monitoring probe, that need the same endpoint.
 
 Where keys live is deliberately yours to decide. The supplied `HashedApiKeyStore` holds SHA-256
 hashes rather than plaintext and compares them in fixed time — an ordinary string comparison
