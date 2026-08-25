@@ -22,7 +22,7 @@ namespace Microsoft.SCIM.WebHostSample.IIS
             // SCIM container and formatted by the SCIM formatter settings. Conventional routes
             // are not scanned that way, so they stay on this configuration only.
             //
-            // If your application already uses attribute routing, see integration-guide.md.
+            // If your application already uses attribute routing, see docs/integration-guide.md.
             configuration.Routes.MapHttpRoute(
                 name: "DefaultApi",
                 routeTemplate: "api/{controller}/{id}",

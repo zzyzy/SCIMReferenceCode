@@ -5,7 +5,7 @@ Framework 4.8 and want to add a SCIM 2.0 endpoint to it, so that Microsoft Entra
 another identity provider) can create, update and delete users and groups in your system.
 
 It covers integration only. For deployment concerns — TLS, strong naming, token key
-management — read [docs/net48-hosting.md](docs/net48-hosting.md) as well.
+management — read [net48-hosting.md](net48-hosting.md) as well.
 
 ---
 
@@ -106,7 +106,7 @@ Two things to know:
 It is a reference, not a starting point — it stores everything in process memory.
 
 If you serve both `/Users` and `/Groups`, `InMemoryEduPassProvider` in `SCIM.EduPass/Provider`
-also shows how to keep the two consistent — see `docs/edupass-integration.md` §3.
+also shows how to keep the two consistent — see `edupass-integration.md` §3.
 
 Logging needs no SCIM-specific wiring: the library takes `ILogger` and controllers resolve
 `ILogger<T>`.
@@ -214,7 +214,7 @@ OWIN's JWT middleware has **no OIDC discovery**, so the issuer's signing keys ar
 supply. For an issuer publishing a bare JWKS, `Anacle.ApiFramework.Authentication` ships a key
 provider rather than you hand-rolling one — `app.UseJsonWebKeySetAuthentication(options)`. Set
 `ValidAlgorithms`, or the handler accepts any algorithm the key material supports. See
-`docs/edupass-integration.md` §1. A validating gateway in front also works.
+`edupass-integration.md` §1. A validating gateway in front also works.
 
 Do not copy the samples' symmetric signing key - it is a committed dummy, and anyone reading
 this repository can mint a token with it.
@@ -349,7 +349,7 @@ Add to `web.config`:
 </system.webServer>
 ```
 
-See [docs/net48-hosting.md](docs/net48-hosting.md) section 3 for the remaining IIS notes.
+See [net48-hosting.md](net48-hosting.md) section 3 for the remaining IIS notes.
 
 ---
 

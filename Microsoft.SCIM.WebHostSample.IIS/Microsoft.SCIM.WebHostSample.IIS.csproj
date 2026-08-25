@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Demonstrates integration-guide.md Option A: adding the SCIM endpoints to an application
+    Demonstrates docs/integration-guide.md Option A: adding the SCIM endpoints to an application
     that already has its own ASP.NET Web API surface, hosted under System.Web (IIS).
 
     Microsoft.SCIM.WebHostSample.Net48 stays as it is - an OWIN self-host that runs with F5.
