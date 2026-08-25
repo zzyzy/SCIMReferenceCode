@@ -21,6 +21,9 @@ Once wired up, your application serves these routes:
 | `GET /scim/ServiceProviderConfig`, `/scim/Schemas`, `/scim/ResourceTypes` | Discovery |
 | `GET/PUT/PATCH/DELETE /scim/{id}` | Service root |
 
+`HEAD` is answered with 405 on every route: SCIM defines no HEAD semantics, and letting Web
+API dispatch it to a `GET` action resets the connection instead.
+
 The route prefix defaults to `scim`; pass `pathPrefix` to `ScimHttpConfiguration.Configure` to
 change it. URLs you already serve under that prefix will conflict.
 
@@ -34,7 +37,8 @@ Everything else — routing, JSON shape, filtering, error mapping — is done fo
 The projects are not published as NuGet packages. Add project references, or build them and
 reference the DLLs:
 
-- `Microsoft.SCIM.Core` — the SCIM protocol and schema layer.
+- `Microsoft.SCIM.Core` — the SCIM protocol and schema layer. The project lives in
+  `Microsoft.SystemForCrossDomainIdentityManagement\` and builds `Microsoft.SCIM.dll`.
 - `Microsoft.SCIM.AspNet` — the ASP.NET Web API hosting layer (references Core).
 
 ```xml
@@ -186,7 +190,8 @@ Simpler, but it changes behaviour for **all** of your controllers. `Configure` w
 - remove the XML formatter, so `Accept: application/xml` starts returning 406 everywhere;
 - set `NullValueHandling.Ignore` on the JSON formatter, so null properties disappear from
   every response;
-- add a global exception filter;
+- add a global exception filter and two message handlers (HEAD, and request buffering for the
+  failure logging);
 - call `MapHttpAttributeRoutes()`.
 
 If your application uses XML, relies on nulls in its JSON, or has its own dependency
@@ -194,6 +199,10 @@ resolver, use Option A instead.
 
 Either way, call `ScimHttpConfiguration.Configure` **before** any of your own
 `config.Routes.Map...` calls, and do not call `MapHttpAttributeRoutes()` twice.
+
+If your users carry a schema extension, register the resource type instead:
+`ScimHttpConfiguration.Configure<MyUser>(config, serviceProvider)`. That binds `/Users` to
+`MyUser` and suppresses the built-in `UsersController` — see `edupass-integration.md` §2.
 
 ## Step 4 — authentication
 
