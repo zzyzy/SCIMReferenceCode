@@ -96,7 +96,10 @@ namespace Microsoft.SCIM.WebHostSample.IIS
             ScimStartup.ConfigureAuthentication(app, configuration, isDevelopment);
 
             HttpConfiguration scimConfiguration = new HttpConfiguration();
-            ScimHttpConfiguration.Configure(scimConfiguration, serviceProvider);
+            ScimHttpConfiguration.Configure(
+                scimConfiguration,
+                serviceProvider,
+                configuration["SCIM_PATH_PREFIX"]);
 
             // A request that matches no route on scimConfiguration falls through to the next
             // stage of the pipeline, which under Microsoft.Owin.Host.SystemWeb is the

@@ -215,7 +215,8 @@ app.MapScim();
 
 `AddScim` registers your provider as a singleton, adds the SCIM controllers as an application
 part, and installs the exception filter, the buffering filter and the route convention.
-`pathPrefix` (default `scim`) changes the URL segment the endpoints live under.
+`pathPrefix` (default `scim`) changes the URL segment the endpoints live under. Pass an empty
+string to serve them at the application root, for example `AddScim(provider, pathPrefix: "")`.
 
 **On ASP.NET Web API 2**, give SCIM its own `HttpConfiguration`:
 
@@ -252,7 +253,7 @@ step-by-step.
 | `AddScim<T>` / `ScimHttpConfiguration.Configure<T>` | bind `/Users` to your own User type |
 | `ScimUsersController<T>` / `ScimUsersApiController<T>` | derive if you also need to decorate the controller |
 | `suppressedControllerTypes` | replace a built-in controller with your own on the same route |
-| `pathPrefix` | serve SCIM under something other than `/scim` |
+| `pathPrefix` | serve SCIM under another segment, or at the application root with `""` |
 | `ScimTypedException` | return a precise `scimType` from your provider |
 | `ScimLogging.MaximumBodyLength` / `RedactedHeaders` | tune what failure logs contain |
 | `IEduPassStore` | plug storage into `BaseEduPassScimProvider` without rewriting its rules |

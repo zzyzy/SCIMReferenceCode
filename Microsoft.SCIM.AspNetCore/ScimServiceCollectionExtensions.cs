@@ -44,8 +44,9 @@ namespace Microsoft.SCIM
         /// <c>ILogger&lt;T&gt;</c>, so the host's existing logging configuration is used as-is.
         /// </summary>
         /// <param name="pathPrefix">
-        /// The URL segment to serve the SCIM endpoints under. Defaults to <c>scim</c> when
-        /// null or blank. See <see cref="ScimPath"/>.
+        /// The URL segment to serve the SCIM endpoints under. Null uses the default <c>scim</c>;
+        /// an empty or whitespace-only value serves them at the application root. See
+        /// <see cref="ScimPath"/>.
         /// </param>
         /// <remarks>
         /// <c>AddApplicationPart</c> is load-bearing: the SCIM controllers live in this
@@ -93,7 +94,7 @@ namespace Microsoft.SCIM
                 throw new ArgumentNullException(nameof(provider));
             }
 
-            if (!string.IsNullOrWhiteSpace(pathPrefix))
+            if (null != pathPrefix)
             {
                 ScimPath.SetPrefix(pathPrefix);
             }

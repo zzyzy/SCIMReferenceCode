@@ -31,7 +31,7 @@ namespace Microsoft.SCIM
         private static string prefix = ScimPath.DefaultPrefix;
         private static bool observed;
 
-        /// <summary>The configured segment, with no leading or trailing separator.</summary>
+        /// <summary>The configured segment, with no leading or trailing separator, or empty for the application root.</summary>
         public static string Prefix
         {
             get
@@ -45,18 +45,19 @@ namespace Microsoft.SCIM
         }
 
         /// <summary>
-        /// Sets the segment. Idempotent: setting the value it already has is always allowed,
+        /// Sets the segment. An empty or whitespace-only value serves SCIM at the application
+        /// root. Idempotent: setting the value it already has is always allowed,
         /// so repeated host wiring with the same configuration does not throw.
         /// </summary>
         /// <exception cref="ArgumentException">
-        /// <paramref name="value"/> is empty, or contains a path separator or whitespace.
+        /// <paramref name="value"/> is null, or contains a path separator or whitespace.
         /// </exception>
         /// <exception cref="InvalidOperationException">
         /// A different segment has already been read by the routing or URI layers.
         /// </exception>
         public static void SetPrefix(string value)
         {
-            if (string.IsNullOrWhiteSpace(value))
+            if (null == value)
             {
                 throw new ArgumentException(
                     SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidScimPathPrefix,
@@ -65,8 +66,7 @@ namespace Microsoft.SCIM
 
             string normalized = value.Trim().Trim('/');
 
-            if (string.IsNullOrWhiteSpace(normalized)
-                || normalized.IndexOf('/') >= 0
+            if (normalized.IndexOf('/') >= 0
                 || normalized.IndexOf(' ') >= 0)
             {
                 throw new ArgumentException(
@@ -120,7 +120,10 @@ namespace Microsoft.SCIM
 
             if (template.StartsWith(ScimPath.DefaultPrefix + "/", StringComparison.OrdinalIgnoreCase))
             {
-                return configured + template.Substring(ScimPath.DefaultPrefix.Length);
+                string remainder = template.Substring(ScimPath.DefaultPrefix.Length + 1);
+                return string.IsNullOrEmpty(configured)
+                    ? remainder
+                    : configured + "/" + remainder;
             }
 
             return template;

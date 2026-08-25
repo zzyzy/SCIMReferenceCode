@@ -116,14 +116,15 @@ namespace Microsoft.SCIM.WebHostSample
             Startup.ConfigureAuthentication(app, configuration, isDevelopment);
 
             HttpConfiguration httpConfiguration = new HttpConfiguration();
+            string pathPrefix = configuration["SCIM_PATH_PREFIX"];
 
             if (eduPass)
             {
-                ScimHttpConfiguration.Configure<EduPassUser>(httpConfiguration, serviceProvider);
+                ScimHttpConfiguration.Configure<EduPassUser>(httpConfiguration, serviceProvider, pathPrefix);
             }
             else
             {
-                ScimHttpConfiguration.Configure(httpConfiguration, serviceProvider);
+                ScimHttpConfiguration.Configure(httpConfiguration, serviceProvider, pathPrefix);
             }
 
             app.UseWebApi(httpConfiguration);

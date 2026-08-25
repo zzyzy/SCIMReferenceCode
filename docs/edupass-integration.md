@@ -382,6 +382,9 @@ builder.Services.AddScim(provider, pathPrefix: "identity");
 // or ScimHttpConfiguration.Configure(config, services, pathPrefix: "identity");
 ```
 
+Pass an empty string to remove the prefix and serve `/Users`, `/Groups`, and the discovery
+endpoints at the application root. A null value keeps the default `scim` prefix.
+
 `ScimPath` holds the value process-wide and refuses to change after the routing or URI layers
 have read it. That guard is the point: routing, `Location` headers and `meta.location` all read
 the same value, and a host that routed on one segment while emitting URIs built from another

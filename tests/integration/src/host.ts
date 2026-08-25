@@ -72,17 +72,21 @@ const EDUPASS_UINFIN_PORTS: Record<Leg, number> = { net10: 5189, net48: 5190 };
  */
 const EDUPASS_STRICT_PORTS: Record<Leg, number> = { net10: 5191, net48: 5192 };
 
-export const BASE_URL = EXTERNAL_BASE_URL ?? `http://localhost:${PORTS[LEG]}/scim`;
+const configuredPrefix = process.env["SCIM_PATH_PREFIX"];
+const pathPrefix = (configuredPrefix ?? "scim").trim().replace(/^\/+|\/+$/gu, "");
+const routeBase = pathPrefix.length === 0 ? "" : `/${pathPrefix}`;
 
-export const EDUPASS_BASE_URL = `http://localhost:${EDUPASS_PORTS[LEG]}/scim`;
+export const BASE_URL = EXTERNAL_BASE_URL ?? `http://localhost:${PORTS[LEG]}${routeBase}`;
 
-export const UNIMPLEMENTED_BASE_URL = `http://localhost:${UNIMPLEMENTED_PORTS[LEG]}/scim`;
+export const EDUPASS_BASE_URL = `http://localhost:${EDUPASS_PORTS[LEG]}${routeBase}`;
 
-export const FAULTY_BASE_URL = `http://localhost:${FAULTY_PORTS[LEG]}/scim`;
+export const UNIMPLEMENTED_BASE_URL = `http://localhost:${UNIMPLEMENTED_PORTS[LEG]}${routeBase}`;
 
-export const EDUPASS_UINFIN_BASE_URL = `http://localhost:${EDUPASS_UINFIN_PORTS[LEG]}/scim`;
+export const FAULTY_BASE_URL = `http://localhost:${FAULTY_PORTS[LEG]}${routeBase}`;
 
-export const EDUPASS_STRICT_BASE_URL = `http://localhost:${EDUPASS_STRICT_PORTS[LEG]}/scim`;
+export const EDUPASS_UINFIN_BASE_URL = `http://localhost:${EDUPASS_UINFIN_PORTS[LEG]}${routeBase}`;
+
+export const EDUPASS_STRICT_BASE_URL = `http://localhost:${EDUPASS_STRICT_PORTS[LEG]}${routeBase}`;
 
 /**
  * The development signing key committed to appsettings.Development.json.

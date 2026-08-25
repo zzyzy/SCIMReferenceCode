@@ -166,11 +166,13 @@ namespace Microsoft.SCIM
             // does the same - omitting it here produced references that 404 while the
             // location beside them resolved.
             string origin = baseResource.AbsoluteUri.TrimEnd('/');
+            string prefix = ScimPath.Prefix;
             return
                 origin
                 + ServiceConstants.SeparatorSegments
-                + ScimPath.Prefix
-                + ServiceConstants.SeparatorSegments
+                + (string.IsNullOrEmpty(prefix)
+                    ? string.Empty
+                    : prefix + ServiceConstants.SeparatorSegments)
                 + path
                 + ServiceConstants.SeparatorSegments
                 + Uri.EscapeDataString(identifier);

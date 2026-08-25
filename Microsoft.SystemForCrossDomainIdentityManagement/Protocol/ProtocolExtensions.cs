@@ -904,12 +904,15 @@ namespace Microsoft.SCIM
                 throw new ArgumentNullException(nameof(path));
             }
 
-            string baseResourceIdentifierValue = baseResourceIdentifier.ToString();
+            string baseResourceIdentifierValue = baseResourceIdentifier.ToString().TrimEnd('/');
+            string prefix = ScimPath.Prefix;
             string resultValue =
                 baseResourceIdentifierValue +
-                ScimPath.Prefix +
                 ServiceConstants.SeparatorSegments +
-                path;
+                (string.IsNullOrEmpty(prefix)
+                    ? string.Empty
+                    : prefix + ServiceConstants.SeparatorSegments) +
+                path.TrimStart('/');
 
             Uri result = new Uri(resultValue);
             return result;

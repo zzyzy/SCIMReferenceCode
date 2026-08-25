@@ -29,7 +29,7 @@ namespace Microsoft.SCIM
                 throw new ArgumentNullException(nameof(identifier));
             }
 
-            string path = identifier.OriginalString;
+            string path = identifier.IsAbsoluteUri ? identifier.AbsolutePath : identifier.OriginalString;
 
             // System.Uri.Segments is not supported for relative identifiers.  
             var segmentsIndexed =
@@ -43,14 +43,17 @@ namespace Microsoft.SCIM
                         })
                 .ToArray(); ;
 
+            string prefix = ScimPath.Prefix;
             var segmentSystemForCrossDomainIdentityManagement =
-                segmentsIndexed
-                .LastOrDefault(
-                    (item) =>
-                        item.Segment.Equals(ScimPath.Prefix, StringComparison.OrdinalIgnoreCase));
+                string.IsNullOrEmpty(prefix)
+                    ? null
+                    : segmentsIndexed
+                        .LastOrDefault(
+                            (item) =>
+                                item.Segment.Equals(prefix, StringComparison.OrdinalIgnoreCase));
             if (null == segmentSystemForCrossDomainIdentityManagement)
             {
-                if (identifier.IsAbsoluteUri)
+                if (identifier.IsAbsoluteUri && !string.IsNullOrEmpty(prefix))
                 {
                     string exceptionMessage =
                         string.Format(

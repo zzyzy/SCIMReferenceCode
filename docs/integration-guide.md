@@ -25,7 +25,8 @@ Once wired up, your application serves these routes:
 API dispatch it to a `GET` action resets the connection instead.
 
 The route prefix defaults to `scim`; pass `pathPrefix` to `ScimHttpConfiguration.Configure` to
-change it. URLs you already serve under that prefix will conflict.
+change it. Pass `pathPrefix: ""` to serve `/Users`, `/Groups`, and the discovery endpoints at
+the application root. URLs you already serve there will conflict.
 
 You write one class: a provider that maps SCIM operations onto your own user store.
 Everything else — routing, JSON shape, filtering, error mapping — is done for you.

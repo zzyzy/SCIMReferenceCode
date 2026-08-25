@@ -43,8 +43,9 @@ namespace Microsoft.SCIM
         }
 
         /// <param name="pathPrefix">
-        /// The URL segment to serve the SCIM endpoints under. Defaults to <c>scim</c> when
-        /// null or blank. See <see cref="ScimPath"/>.
+        /// The URL segment to serve the SCIM endpoints under. Null uses the default <c>scim</c>;
+        /// an empty or whitespace-only value serves them at the application root. See
+        /// <see cref="ScimPath"/>.
         /// </param>
         /// <param name="suppressedControllerTypes">
         /// Controllers in this assembly that must not be discovered, so that a downstream
@@ -83,7 +84,7 @@ namespace Microsoft.SCIM
                 throw new ArgumentNullException(nameof(services));
             }
 
-            if (!string.IsNullOrWhiteSpace(pathPrefix))
+            if (null != pathPrefix)
             {
                 ScimPath.SetPrefix(pathPrefix);
             }

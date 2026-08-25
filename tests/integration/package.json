@@ -5,6 +5,7 @@
   "description": "Integration tests for the SCIM reference endpoints, run against a live host.",
   "scripts": {
     "test": "vitest run",
+    "test:root": "cross-env SCIM_PATH_PREFIX=/ vitest run",
     "test:watch": "vitest",
     "test:coverage": "cross-env SCIM_COVERAGE=1 vitest run",
     "test:net48": "cross-env SCIM_LEG=net48 vitest run",

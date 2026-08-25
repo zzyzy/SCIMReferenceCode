@@ -97,23 +97,24 @@ namespace Microsoft.SCIM.WebHostSample
             Program.ConfigureScimLogging(configuration);
 
             string provider = configuration["SCIM_PROVIDER"];
+            string pathPrefix = configuration["SCIM_PATH_PREFIX"];
 
             if (Program.Selected(provider, "edupass"))
             {
                 bool requireUinFin = Program.Enabled(configuration["SCIM_EDUPASS_REQUIRE_UINFIN"]);
-                builder.Services.AddScim<EduPassUser>(new InMemoryEduPassProvider(requireUinFin));
+                builder.Services.AddScim<EduPassUser>(new InMemoryEduPassProvider(requireUinFin), pathPrefix);
             }
             else if (Program.Selected(provider, "unimplemented"))
             {
-                builder.Services.AddScim(new UnimplementedProvider());
+                builder.Services.AddScim(new UnimplementedProvider(), pathPrefix);
             }
             else if (Program.Selected(provider, "faulty"))
             {
-                builder.Services.AddScim(new FaultyProvider());
+                builder.Services.AddScim(new FaultyProvider(), pathPrefix);
             }
             else
             {
-                builder.Services.AddScim(new InMemoryProvider());
+                builder.Services.AddScim(new InMemoryProvider(), pathPrefix);
             }
 
             // Request and response logging, which is the host's to configure - the SCIM

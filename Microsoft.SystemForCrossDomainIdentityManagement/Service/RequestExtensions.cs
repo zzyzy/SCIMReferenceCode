@@ -34,12 +34,47 @@ namespace Microsoft.SCIM
                 throw new ArgumentException(SystemForCrossDomainIdentityManagementServiceResources.ExceptionInvalidRequest);
             }
 
+            string configuredPrefix = ScimPath.Prefix;
+            if (string.IsNullOrEmpty(configuredPrefix))
+            {
+                string requestPath = request.RequestUri.AbsolutePath;
+                string[] resourceSegments =
+                    new[]
+                    {
+                        ProtocolConstants.PathUsers,
+                        ProtocolConstants.PathGroups,
+                        ProtocolConstants.PathBulk,
+                        ServiceConstants.PathSegmentSchemas,
+                        ServiceConstants.PathSegmentResourceTypes,
+                        ServiceConstants.PathSegmentServiceProviderConfiguration
+                    };
+
+                int resourceIndex =
+                    resourceSegments
+                        .Select(
+                            segment =>
+                                requestPath.IndexOf(
+                                    RequestExtensions.SegmentSeparator + segment,
+                                    StringComparison.OrdinalIgnoreCase))
+                        .Where(index => index >= 0)
+                        .DefaultIfEmpty(0)
+                        .Min();
+
+                UriBuilder rootBaseResource = new UriBuilder(request.RequestUri)
+                {
+                    Path = requestPath.Substring(0, resourceIndex).TrimEnd('/') + "/",
+                    Query = string.Empty,
+                    Fragment = string.Empty
+                };
+                return rootBaseResource.Uri;
+            }
+
             string lastSegment =
                 request.RequestUri.AbsolutePath.Split(
                     RequestExtensions.SegmentSeparators.Value,
                     StringSplitOptions.RemoveEmptyEntries)
                 .Last();
-            if (string.Equals(lastSegment, ScimPath.Prefix, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(lastSegment, configuredPrefix, StringComparison.OrdinalIgnoreCase))
             {
                 return request.RequestUri;
             }

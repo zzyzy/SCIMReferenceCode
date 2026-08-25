@@ -48,7 +48,9 @@ namespace Microsoft.SCIM
                     path = ProtocolConstants.PathGroups;
                     return true;
                 case SchemaIdentifiers.None:
-                    path = ScimPath.Prefix;
+                    path = string.IsNullOrEmpty(ScimPath.Prefix)
+                        ? ServiceConstants.SeparatorSegments
+                        : ScimPath.Prefix;
                     return true;
                 default:
                     return false;
