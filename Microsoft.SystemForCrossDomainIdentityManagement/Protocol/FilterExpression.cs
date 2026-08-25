@@ -44,6 +44,7 @@ namespace Microsoft.SCIM
         private const int MaxRecursionDepth = 32;
 
         private const char BracketClose = ')';
+        private const char BracketOpen = '(';
         private const char Escape = '\\';
         private const char Quote = '"';
 
@@ -215,8 +216,93 @@ namespace Microsoft.SCIM
         }
 
         public FilterExpression(string text)
-            : this(text: text, group: 0, level: 0)
+            : this(text: FilterExpression.RequireBalancedBrackets(text), group: 0, level: 0)
         {
+        }
+
+        /// <summary>
+        /// Refuses an expression whose brackets do not balance.
+        /// </summary>
+        /// <remarks>
+        /// The parser tracks nesting by counting '(' up and ')' down, so an unmatched ')'
+        /// drove the count negative and was refused - but an unmatched '(' simply left it
+        /// high, and the expression was parsed as though the group had closed. A client
+        /// that dropped a bracket got an answer rather than an error: '(a eq "x" and b eq
+        /// true' returned an empty list, which reads as "nothing matched" and not as "your
+        /// filter is malformed".
+        ///
+        /// Brackets inside a quoted comparison value are literal text, so quoting - and
+        /// escaping within a quote - has to be tracked here too.
+        /// </remarks>
+        private static string RequireBalancedBrackets(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return text;
+            }
+
+            int depth = 0;
+            bool quoted = false;
+            bool escaped = false;
+
+            foreach (char character in text)
+            {
+                if (escaped)
+                {
+                    escaped = false;
+                    continue;
+                }
+
+                if (FilterExpression.Escape == character)
+                {
+                    escaped = true;
+                    continue;
+                }
+
+                if (FilterExpression.Quote == character)
+                {
+                    quoted = !quoted;
+                    continue;
+                }
+
+                if (quoted)
+                {
+                    continue;
+                }
+
+                if (FilterExpression.BracketOpen == character)
+                {
+                    depth++;
+                }
+                else if (FilterExpression.BracketClose == character)
+                {
+                    depth--;
+
+                    if (depth < 0)
+                    {
+                        throw new ArgumentException(
+                            string.Format(
+                                CultureInfo.InvariantCulture,
+                                SystemForCrossDomainIdentityManagementProtocolResources.ExceptionInvalidFilterTemplate,
+                                text),
+                            nameof(text));
+                    }
+                }
+            }
+
+            // An unterminated quote is the same class of mistake and the same answer: the
+            // rest of the expression was being read as a comparison value.
+            if (0 != depth || quoted)
+            {
+                throw new ArgumentException(
+                    string.Format(
+                        CultureInfo.InvariantCulture,
+                        SystemForCrossDomainIdentityManagementProtocolResources.ExceptionInvalidFilterTemplate,
+                        text),
+                    nameof(text));
+            }
+
+            return text;
         }
 
         private enum ComparisonOperatorValue
