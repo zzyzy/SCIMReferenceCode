@@ -15,6 +15,7 @@ namespace Microsoft.SCIM.WebHostSample
     using Microsoft.Owin.Security.Jwt;
     using Microsoft.Owin.Security.OAuth;
     using Microsoft.SCIM.WebHostSample.Provider;
+    using Scim.EduPass;
     // global:: because this file's namespace starts with Microsoft, so a plain 'using Owin'
     // binds to Microsoft.Owin rather than to the root Owin namespace that IAppBuilder lives in.
     using global::Owin;
@@ -51,7 +52,42 @@ namespace Microsoft.SCIM.WebHostSample
             bool isDevelopment =
                 string.Equals(environmentName, Startup.EnvironmentNameDevelopment, StringComparison.OrdinalIgnoreCase);
 
-            IProvider provider = new InMemoryProvider();
+            // SCIM_PROVIDER=edupass serves the Edupass User resource type instead of the plain
+            // core one, exactly as the net10.0 sample does. Configure<EduPassUser> binds
+            // /Users to the extended type, which is the only way its extension attributes
+            // survive model binding.
+            Startup.ConfigureLogging(configuration);
+
+            bool eduPass =
+                string.Equals(configuration["SCIM_PROVIDER"], "edupass", StringComparison.OrdinalIgnoreCase);
+
+            bool unimplemented =
+                string.Equals(configuration["SCIM_PROVIDER"], "unimplemented", StringComparison.OrdinalIgnoreCase);
+
+            bool faulty =
+                string.Equals(configuration["SCIM_PROVIDER"], "faulty", StringComparison.OrdinalIgnoreCase);
+
+            bool requireUinFin =
+                string.Equals(configuration["SCIM_EDUPASS_REQUIRE_UINFIN"], "1", StringComparison.Ordinal)
+                || string.Equals(configuration["SCIM_EDUPASS_REQUIRE_UINFIN"], "true", StringComparison.OrdinalIgnoreCase);
+
+            IProvider provider;
+            if (eduPass)
+            {
+                provider = new InMemoryEduPassProvider(requireUinFin);
+            }
+            else if (unimplemented)
+            {
+                provider = new UnimplementedProvider();
+            }
+            else if (faulty)
+            {
+                provider = new FaultyProvider();
+            }
+            else
+            {
+                provider = new InMemoryProvider();
+            }
 
             // Identical registration lines to the net10.0 sample - that is the point of
             // bridging MEDI onto Web API's IDependencyResolver.
@@ -80,7 +116,15 @@ namespace Microsoft.SCIM.WebHostSample
             Startup.ConfigureAuthentication(app, configuration, isDevelopment);
 
             HttpConfiguration httpConfiguration = new HttpConfiguration();
-            ScimHttpConfiguration.Configure(httpConfiguration, serviceProvider);
+
+            if (eduPass)
+            {
+                ScimHttpConfiguration.Configure<EduPassUser>(httpConfiguration, serviceProvider);
+            }
+            else
+            {
+                ScimHttpConfiguration.Configure(httpConfiguration, serviceProvider);
+            }
 
             app.UseWebApi(httpConfiguration);
         }

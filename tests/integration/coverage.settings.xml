@@ -1,0 +1,252 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  What the integration coverage number counts.
+
+  The point of the number is to say how much of the SCIM behaviour these tests
+  actually exercise. Code that no HTTP request can reach makes the number smaller
+  without making it mean more, so this file takes it out of the denominator - and
+  every exclusion below says which of three reasons it is there for:
+
+    (dead)    nothing in this repository calls it, on either hosting leg
+    (client)  only an outbound SCIM *client* runs it; the hosts never do
+    (plumbing) serialization, configuration or utility scaffolding, not SCIM rules
+
+  The classification came from tracing callers from both hosts - ASP.NET Core
+  (Microsoft.SCIM.AspNetCore) and ASP.NET Web API / OWIN (Microsoft.SCIM.AspNet).
+  Anything a request can reach on either leg is counted, including the paths only
+  Bulk reaches.
+-->
+<Configuration>
+  <CodeCoverage>
+
+    <ModulePaths>
+      <Include>
+        <!-- The code under test: the library, both hosting layers, the Edupass
+             behaviour and the sample providers the tests drive. -->
+        <ModulePath>.*\\Microsoft\.SCIM\.dll$</ModulePath>
+        <ModulePath>.*\\Microsoft\.SCIM\.AspNetCore\.dll$</ModulePath>
+        <ModulePath>.*\\Microsoft\.SCIM\.AspNet\.dll$</ModulePath>
+        <ModulePath>.*\\SCIM\.EduPass\.dll$</ModulePath>
+        <ModulePath>.*\\Microsoft\.SCIM\.WebHostSample\.dll$</ModulePath>
+        <ModulePath>.*\\Microsoft\.SCIM\.WebHostSample\.Net48\.exe$</ModulePath>
+      </Include>
+      <Exclude>
+        <!-- Third-party: OWIN, Newtonsoft, the JWT stack. Not ours to cover. -->
+        <ModulePath>.*\\Microsoft\.Owin.*</ModulePath>
+        <ModulePath>.*\\Newtonsoft\..*</ModulePath>
+        <ModulePath>.*\\System\..*</ModulePath>
+        <ModulePath>.*\\Microsoft\.Extensions\..*</ModulePath>
+        <ModulePath>.*\\Microsoft\.IdentityModel\..*</ModulePath>
+        <ModulePath>.*\\Anacle\..*</ModulePath>
+      </Exclude>
+    </ModulePaths>
+
+    <Sources>
+      <Exclude>
+
+        <!-- Generated resource accessors. (plumbing) -->
+        <Source>.*Resources\.Designer\.cs$</Source>
+
+        <!--
+          The vendored System.Web.Http.HttpResponseException shim, compiled on
+          net10.0 only in place of the discontinued WebApiCompatShim. (plumbing)
+        -->
+        <Source>.*\\Compat\\.*</Source>
+
+        <!--
+          SCIM Event Tokens (RFC 8417). A real feature of the library, but no host
+          in this repository wires an event endpoint, so no request reaches any of
+          it. Covering it needs a host that publishes events, not another test.
+          (dead)
+        -->
+        <Source>.*\\Schemas\\EventToken\.cs$</Source>
+        <Source>.*\\Schemas\\EventTokenDecorator\.cs$</Source>
+        <Source>.*\\Schemas\\EventTokenFactory\.cs$</Source>
+        <Source>.*\\Schemas\\SingularEventToken\.cs$</Source>
+        <Source>.*\\Schemas\\UnsecuredEventTokenFactory\.cs$</Source>
+        <Source>.*\\Schemas\\SingularUnsecuredEventTokenFactory\.cs$</Source>
+        <Source>.*\\Schemas\\PluralUnsecuredEventTokenFactory\.cs$</Source>
+        <!-- A Unix timestamp type used only by the event-token subsystem. (dead) -->
+        <Source>.*\\Schemas\\UnixTime\.cs$</Source>
+
+        <!--
+          The Newtonsoft deserializing-factory family. Both hosts bind request
+          bodies through MVC's Newtonsoft formatter plus SchematizedJsonConverter -
+          which says so in its own remarks - so none of these factories runs on
+          either leg. SchematizedJsonConverter itself is *not* excluded: it is the
+          path that does run. (dead)
+        -->
+        <Source>.*\\Protocol\\SchematizedJsonDeserializingFactory\.cs$</Source>
+        <Source>.*\\Protocol\\SchematizedJsonDeserializingFactoryBase\.cs$</Source>
+        <Source>.*\\Protocol\\JsonDeserializingFactory\.cs$</Source>
+        <Source>.*\\Protocol\\ProtocolJsonDeserializingFactory\.cs$</Source>
+        <Source>.*\\Protocol\\PatchRequest2DeserializingFactory\.cs$</Source>
+        <Source>.*\\Protocol\\PatchRequest2JsonDeserializingFactory\.cs$</Source>
+        <Source>.*\\Protocol\\PatchOperationJsonDeserializingFactory\.cs$</Source>
+        <Source>.*\\Protocol\\PatchOperation2SingleValuedJsonDeserializingFactory\.cs$</Source>
+        <Source>.*\\Protocol\\QueryResponseJsonDeserializingFactory\.cs$</Source>
+        <Source>.*\\Protocol\\ErrorResponseJsonDeserializingFactory\.cs$</Source>
+        <Source>.*\\Schemas\\JsonDeserializingFactory\.cs$</Source>
+        <Source>.*\\Schemas\\Core2EnterpriseUserJsonDeserializingFactory\.cs$</Source>
+        <Source>.*\\Schemas\\Core2UserJsonDeserializingFactory\.cs$</Source>
+        <Source>.*\\Schemas\\Core2GroupJsonDeserializingFactory\.cs$</Source>
+        <Source>.*\\Schemas\\Core2ResourceTypeJsonDeserializingFactory\.cs$</Source>
+        <Source>.*\\Schemas\\Core2ServiceConfigurationJsonDeserializingFactory\.cs$</Source>
+        <Source>.*\\Schemas\\TypeSchemeJsonDeserializingFactory\.cs$</Source>
+        <Source>.*\\Schemas\\ManagerDeserializingFactory\.cs$</Source>
+        <Source>.*\\Service\\DeserializingFactory\.cs$</Source>
+
+        <!-- JSON reader/writer and normalizer scaffolding. (plumbing) -->
+        <Source>.*\\Schemas\\JsonFactory\.cs$</Source>
+        <Source>.*\\Schemas\\TrustedJsonFactory\.cs$</Source>
+        <Source>.*\\Schemas\\JsonSerializer\.cs$</Source>
+        <Source>.*\\Schemas\\JsonNormalizer\.cs$</Source>
+        <Source>.*\\Schemas\\JsonNormalizerTemplate\.cs$</Source>
+        <Source>.*\\Protocol\\ProtocolJsonNormalizer\.cs$</Source>
+
+        <!-- app.config / web.config section readers. (plumbing) -->
+        <Source>.*\\Schemas\\SystemForCrossDomainIdentityManagementConfigurationSection\.cs$</Source>
+        <Source>.*\\Schemas\\ConfigurationSectionFactory\.cs$</Source>
+        <Source>.*\\Schemas\\ConfigurationFactory\.cs$</Source>
+
+        <!--
+          An abstract resource base with no concrete type and no caller, and the
+          specification-version constants nothing reads. (dead)
+        -->
+        <Source>.*\\Schemas\\QualifiedResource\.cs$</Source>
+        <Source>.*\\Schemas\\SpecificationVersion\.cs$</Source>
+
+        <!-- Enumerable, dictionary, date and clone helpers. (plumbing) -->
+        <Source>.*\\Schemas\\DateTimeExtension\.cs$</Source>
+        <Source>.*\\Schemas\\EnumerableExtension\.cs$</Source>
+        <Source>.*\\Protocol\\DictionaryExtension\.cs$</Source>
+        <Source>.*\\Protocol\\IReadOnlyCollectionExtensions\.cs$</Source>
+        <Source>.*\\Protocol\\ObjectExtentions\.cs$</Source>
+
+        <!--
+          The outbound query builder. Composes a SCIM client's query string; the
+          hosts parse one instead, through Filter and QueryParameters. (client)
+        -->
+        <Source>.*\\Protocol\\Query\.cs$</Source>
+
+        <!--
+          An extensibility point with no concrete subclass and no instantiation
+          anywhere: a service that adds a resource type of its own would derive from
+          it. Nothing here does. (dead)
+        -->
+        <Source>.*\\Protocol\\Extension\.cs$</Source>
+
+        <!--
+          The Edupass JWKS validation options. Edupass authenticates with a signed JWT
+          against a published key set, which no sample host wires up - they mint their
+          own development token instead - so nothing constructs these. Covering it needs
+          a host pointed at a real Edupass issuer. (dead)
+        -->
+        <Source>.*\\Authentication\\EduPassAuthentication\.cs$</Source>
+
+        <!--
+          The single-valued patch operation. Only the deserializing factory above
+          constructs one, and both hosts bind PatchOperation2Combined instead. (dead)
+        -->
+        <Source>.*\\Protocol\\PatchOperation2SingleValued\.cs$</Source>
+
+        <!--
+          The bulk operation context for an operation that could not be interpreted.
+          Nothing constructs one - Enlist refuses such an operation outright - so no
+          request reaches either type. (dead)
+        -->
+        <Source>.*\\Service\\InvalidBulkOperationContext\.cs$</Source>
+        <Source>.*\\Service\\InvalidBulkOperationState\.cs$</Source>
+
+      </Exclude>
+    </Sources>
+
+    <Functions>
+      <Exclude>
+        <!--
+          ProtocolExtensions is two things in one file. The patch appliers, the
+          path and identifier readers and the bulkId reference resolution are all
+          reached by requests and stay counted. These are the outbound half:
+          building an HttpRequestMessage for a SCIM client and writing it to a
+          stream. Nothing in this repository calls any of them. (dead/client)
+        -->
+        <Function>.*ProtocolExtensions\.Compose.*</Function>
+        <Function>.*ProtocolExtensions\.Serialize.*</Function>
+        <Function>.*ProtocolExtensions\.ToCollection.*</Function>
+        <Function>.*ProtocolExtensions\.TryMatch.*</Function>
+        <Function>.*ProtocolExtensions\.Matches.*</Function>
+        <Function>.*ProtocolExtensions\.GetIdentifier.*</Function>
+        <Function>.*ProtocolExtensions\.GetSchemaIdentifier.*</Function>
+        <Function>.*HttpRequestMessageWriter.*</Function>
+        <!-- The async state machine SerializeAsync compiles into. -->
+        <Function>.*&lt;SerializeAsync&gt;.*</Function>
+
+        <!--
+          Composing a filter, a query string or a resource URI is what a SCIM *client*
+          does; the hosts parse those instead. Filter.Serialize and the several ToString
+          overloads have no caller on either leg. (client)
+        -->
+        <Function>.*Microsoft\.SCIM\.Filter\.Serialize.*</Function>
+        <Function>.*Microsoft\.SCIM\.Filter\.ToString.*</Function>
+        <Function>.*QueryParameters\.ToString.*</Function>
+        <Function>.*RetrievalParameters\.ToString.*</Function>
+        <Function>.*ResourceIdentifier\.ToString.*</Function>
+        <Function>.*FilterExpression\.ToString.*</Function>
+        <Function>.*OperationValue\.ToString.*</Function>
+        <Function>.*PatchOperation2\.ToString.*</Function>
+        <Function>.*PatchOperation2Base\.ToString.*</Function>
+        <Function>.*PatchOperation2Combined\.ToString.*</Function>
+
+        <!--
+          Building a patch operation in code, which is what a client does. Both hosts
+          bind PatchOperation2Combined from the request body instead. (client)
+        -->
+        <Function>.*PatchOperation2\.Create.*</Function>
+
+        <!--
+          Value equality on ResourceIdentifier, and the invariant hash it uses. Nothing
+          compares or hashes one. (dead)
+        -->
+        <Function>.*ResourceIdentifier\.Equals.*</Function>
+        <Function>.*ResourceIdentifier\.GetHashCode.*</Function>
+        <Function>.*StringExtension\.GetInvariantHashCode.*</Function>
+
+        <!--
+          Serving the SCIM endpoints under a prefix other than the default. Both samples
+          take the default, so no request reaches it. (plumbing)
+        -->
+        <Function>.*ScimPath\.SetPrefix.*</Function>
+
+        <!--
+          The client-side factories for a bulk operation. CreatePatchOperation is not
+          here: the library calls it itself, to synthesize the operations a bulk
+          creation needs. These two have no caller at all. (dead)
+        -->
+        <Function>.*BulkRequestOperation\.CreatePostOperation.*</Function>
+        <Function>.*BulkRequestOperation\.CreateDeleteOperation.*</Function>
+
+        <!-- Compiler-generated equality, hashing and ToString on records/tuples. -->
+        <Function>.*::&lt;Clone&gt;\$.*</Function>
+      </Exclude>
+    </Functions>
+
+    <Attributes>
+      <Exclude>
+        <Attribute>^System\.Diagnostics\.DebuggerHiddenAttribute$</Attribute>
+        <Attribute>^System\.Diagnostics\.DebuggerNonUserCodeAttribute$</Attribute>
+        <Attribute>^System\.CodeDom\.Compiler\.GeneratedCodeAttribute$</Attribute>
+        <!--
+          Deliberately NOT excluding CompilerGeneratedAttribute: an async method's
+          body lives in a compiler-generated state machine, so excluding it would
+          drop every request handler in the library from the report.
+        -->
+
+      </Exclude>
+    </Attributes>
+
+    <CollectFromChildProcesses>True</CollectFromChildProcesses>
+    <UseVerifiableInstrumentation>False</UseVerifiableInstrumentation>
+    <AllowLowIntegrityProcesses>True</AllowLowIntegrityProcesses>
+
+  </CodeCoverage>
+</Configuration>

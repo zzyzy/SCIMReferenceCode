@@ -1,5 +1,14 @@
 import { createHmac } from "node:crypto";
-import { BASE_URL, DEV_AUDIENCE, DEV_ISSUER, DEV_SIGNING_KEY } from "./host.js";
+import {
+  BASE_URL,
+  DEV_AUDIENCE,
+  DEV_ISSUER,
+  DEV_SIGNING_KEY,
+  EDUPASS_BASE_URL,
+  EDUPASS_UINFIN_BASE_URL,
+  FAULTY_BASE_URL,
+  UNIMPLEMENTED_BASE_URL,
+} from "./host.js";
 
 export const SCHEMA_USER = "urn:ietf:params:scim:schemas:core:2.0:User";
 export const SCHEMA_GROUP = "urn:ietf:params:scim:schemas:core:2.0:Group";
@@ -57,6 +66,8 @@ export interface ScimRequestOptions {
   readonly headers?: Record<string, string>;
   /** Omit the Authorization header entirely. */
   readonly anonymous?: boolean;
+  /** Which host to send to. Defaults to the core sample. */
+  readonly base?: string;
 }
 
 export async function scim<T = any>(
@@ -76,7 +87,7 @@ export async function scim<T = any>(
     headers.set("Content-Type", options.contentType ?? SCIM_CONTENT_TYPE);
   }
 
-  const response = await fetch(`${BASE_URL}${path}`, {
+  const response = await fetch(`${options.base ?? BASE_URL}${path}`, {
     method,
     headers,
     body: options.raw !== undefined ? options.raw : hasBody ? JSON.stringify(body) : undefined,
@@ -93,6 +104,51 @@ export async function scim<T = any>(
   }
 
   return { status: response.status, body: parsed as T, text, headers: response.headers };
+}
+
+/**
+ * Sends to the Edupass host instead of the core one.
+ *
+ * A separate process, not a separate route: Edupass binds `/Users` to its own
+ * resource type, and two providers cannot serve one route.
+ */
+export async function edupass<T = any>(
+  method: string,
+  path: string,
+  body?: unknown,
+  options: ScimRequestOptions = {},
+): Promise<ScimResponse<T>> {
+  return scim<T>(method, path, body, { ...options, base: EDUPASS_BASE_URL });
+}
+
+/** Sends to the host whose provider implements nothing. */
+export async function unimplemented<T = any>(
+  method: string,
+  path: string,
+  body?: unknown,
+  options: ScimRequestOptions = {},
+): Promise<ScimResponse<T>> {
+  return scim<T>(method, path, body, { ...options, base: UNIMPLEMENTED_BASE_URL });
+}
+
+/** Sends to the Edupass host that stores UIN/FIN and therefore requires it. */
+export async function edupassUinFin<T = any>(
+  method: string,
+  path: string,
+  body?: unknown,
+  options: ScimRequestOptions = {},
+): Promise<ScimResponse<T>> {
+  return scim<T>(method, path, body, { ...options, base: EDUPASS_UINFIN_BASE_URL });
+}
+
+/** Sends to the host whose provider throws from everything. */
+export async function faulty<T = any>(
+  method: string,
+  path: string,
+  body?: unknown,
+  options: ScimRequestOptions = {},
+): Promise<ScimResponse<T>> {
+  return scim<T>(method, path, body, { ...options, base: FAULTY_BASE_URL });
 }
 
 /** A value unique to this run, so suites can share a host without colliding. */

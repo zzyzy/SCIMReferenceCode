@@ -17,6 +17,7 @@ namespace Microsoft.SCIM.WebHostSample
     using Microsoft.Extensions.Hosting;
     using Microsoft.IdentityModel.Tokens;
     using Microsoft.SCIM.WebHostSample.Provider;
+    using Scim.EduPass;
 
     public class Program
     {
@@ -82,9 +83,31 @@ namespace Microsoft.SCIM.WebHostSample
             // Registers the provider, the monitor, the SCIM controllers (which live in
             // Microsoft.SCIM.AspNetCore, not in this assembly), the Newtonsoft settings and
             // the HttpResponseException filter.
+            //
+            // SCIM_PROVIDER=edupass serves the Edupass User resource type instead of the
+            // plain core one: AddScim<EduPassUser> binds /Users to the extended type, which
+            // is the only way its extension attributes survive model binding.
             Program.ConfigureScimLogging(configuration);
 
-            builder.Services.AddScim(new InMemoryProvider());
+            string provider = configuration["SCIM_PROVIDER"];
+
+            if (Program.Selected(provider, "edupass"))
+            {
+                bool requireUinFin = Program.Enabled(configuration["SCIM_EDUPASS_REQUIRE_UINFIN"]);
+                builder.Services.AddScim<EduPassUser>(new InMemoryEduPassProvider(requireUinFin));
+            }
+            else if (Program.Selected(provider, "unimplemented"))
+            {
+                builder.Services.AddScim(new UnimplementedProvider());
+            }
+            else if (Program.Selected(provider, "faulty"))
+            {
+                builder.Services.AddScim(new FaultyProvider());
+            }
+            else
+            {
+                builder.Services.AddScim(new InMemoryProvider());
+            }
 
             // Request and response logging, which is the host's to configure - the SCIM
             // library logs only what a host cannot see, a failed operation. See
@@ -126,6 +149,11 @@ namespace Microsoft.SCIM.WebHostSample
                         string.Join(", ", app.Urls.DefaultIfEmpty("(see launchSettings.json)"))));
 
             app.Run();
+        }
+
+        private static bool Selected(string configured, string name)
+        {
+            return string.Equals(configured, name, System.StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>

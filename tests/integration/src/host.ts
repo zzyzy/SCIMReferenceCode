@@ -23,7 +23,52 @@ const EXTERNAL_BASE_URL = process.env["SCIM_BASE_URL"];
 
 const PORTS: Record<Leg, number> = { net10: 5180, net48: 5181 };
 
+/**
+ * The Edupass host, run alongside the core one.
+ *
+ * Edupass's User resource type carries an extension schema, so it needs its own
+ * `AddScim<EduPassUser>` registration and cannot share a process with the plain
+ * core provider - two providers cannot serve one `/Users` route. The sample host
+ * selects it with SCIM_PROVIDER=edupass; see WebHostSample/Program.cs.
+ */
+const EDUPASS_PORTS: Record<Leg, number> = { net10: 5183, net48: 5184 };
+
+/**
+ * A host whose provider implements nothing.
+ *
+ * The only way to see what the shared handlers do with an operation no provider has
+ * written yet - which has to be 501, not 500. A working provider never throws
+ * NotImplementedException, so no other host can show it.
+ */
+const UNIMPLEMENTED_PORTS: Record<Leg, number> = { net10: 5185, net48: 5186 };
+
+/**
+ * A host whose provider throws from everything, discovery included.
+ *
+ * The only way to see the shape of the answer when a provider fails for a reason the
+ * library knows nothing about - which has to be the RFC 7644 3.12 error body, not an
+ * ASP.NET one and not a stack trace.
+ */
+const FAULTY_PORTS: Record<Leg, number> = { net10: 5187, net48: 5188 };
+
+/**
+ * The Edupass host as a relying party that stores UIN/FIN.
+ *
+ * One flag drives both what the extension schema advertises and what validation
+ * requires, so the two halves of that behaviour can only be seen together - and only
+ * on a host constructed with it on.
+ */
+const EDUPASS_UINFIN_PORTS: Record<Leg, number> = { net10: 5189, net48: 5190 };
+
 export const BASE_URL = EXTERNAL_BASE_URL ?? `http://localhost:${PORTS[LEG]}/scim`;
+
+export const EDUPASS_BASE_URL = `http://localhost:${EDUPASS_PORTS[LEG]}/scim`;
+
+export const UNIMPLEMENTED_BASE_URL = `http://localhost:${UNIMPLEMENTED_PORTS[LEG]}/scim`;
+
+export const FAULTY_BASE_URL = `http://localhost:${FAULTY_PORTS[LEG]}/scim`;
+
+export const EDUPASS_UINFIN_BASE_URL = `http://localhost:${EDUPASS_UINFIN_PORTS[LEG]}/scim`;
 
 /**
  * The development signing key committed to appsettings.Development.json.
@@ -75,6 +120,17 @@ function hostPaths(leg: Leg): HostPaths {
 export const COVERAGE_OUTPUT = join(REPO_ROOT, "integration-coverage.xml");
 
 /**
+ * Keeps plumbing out of the denominator.
+ *
+ * The library carries a client-side request builder, a Newtonsoft deserializer family
+ * the ASP.NET Core host bypasses, SET/event-token types no host wires up, and the
+ * usual utility and configuration scaffolding. None of it is SCIM behaviour a request
+ * can exercise, so counting it only makes the number say less than it looks like it
+ * says. Every exclusion in this file names why it is there.
+ */
+const COVERAGE_SETTINGS = resolve(HERE, "..", "coverage.settings.xml");
+
+/**
  * Names the collection so that it can be closed deliberately.
  *
  * dotnet-coverage writes its report when collection ends cleanly. Force-killing the
@@ -83,7 +139,7 @@ export const COVERAGE_OUTPUT = join(REPO_ROOT, "integration-coverage.xml");
  */
 const COVERAGE_SESSION = "scim-integration";
 
-let host: ChildProcess | undefined;
+let children: ChildProcess[] = [];
 let collecting = false;
 
 async function reachable(url: string): Promise<boolean> {
@@ -96,22 +152,59 @@ async function reachable(url: string): Promise<boolean> {
   }
 }
 
-async function waitUntilReachable(url: string, timeoutMs = 90_000): Promise<void> {
+async function waitUntilReachable(url: string, timeoutMs = 120_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
-  let lastError = "no attempt made";
 
   while (Date.now() < deadline) {
-    if (host?.exitCode !== null && host?.exitCode !== undefined) {
-      throw new Error(`the host exited with code ${host.exitCode} before becoming reachable`);
-    }
     if (await reachable(url)) {
       return;
     }
-    lastError = `not reachable yet`;
     await new Promise((done) => setTimeout(done, 400));
   }
 
-  throw new Error(`${url} did not come up within ${timeoutMs}ms (${lastError})`);
+  throw new Error(`${url} did not come up within ${timeoutMs}ms`);
+}
+
+interface HostSpec {
+  readonly port: number;
+  /** Extra environment for this host, e.g. the provider selection. */
+  readonly environment: Record<string, string>;
+}
+
+function specs(): HostSpec[] {
+  return [
+    { port: PORTS[LEG], environment: {} },
+    { port: EDUPASS_PORTS[LEG], environment: { SCIM_PROVIDER: "edupass" } },
+    { port: UNIMPLEMENTED_PORTS[LEG], environment: { SCIM_PROVIDER: "unimplemented" } },
+    { port: FAULTY_PORTS[LEG], environment: { SCIM_PROVIDER: "faulty" } },
+    {
+      port: EDUPASS_UINFIN_PORTS[LEG],
+      environment: { SCIM_PROVIDER: "edupass", SCIM_EDUPASS_REQUIRE_UINFIN: "1" },
+    },
+  ];
+}
+
+function spawnChild(command: string, args: string[], paths: HostPaths, environment: NodeJS.ProcessEnv): ChildProcess {
+  // Pipes are attached only when asked for. An open pipe to a live child keeps this
+  // process's event loop alive, so vitest reports that something is preventing the
+  // Vite server from exiting - and the run hangs for ten seconds at the end.
+  const logging = process.env["SCIM_HOST_LOG"] === "1";
+
+  const child = spawn(command, args, {
+    cwd: paths.workingDirectory,
+    env: environment,
+    stdio: logging ? ["ignore", "pipe", "pipe"] : "ignore",
+    shell: process.platform === "win32",
+  });
+
+  if (logging) {
+    child.stdout?.on("data", (chunk: Buffer) => process.stdout.write(`[host] ${chunk}`));
+    child.stderr?.on("data", (chunk: Buffer) => process.stderr.write(`[host:err] ${chunk}`));
+  }
+
+  child.unref();
+  children.push(child);
+  return child;
 }
 
 export async function startHost(): Promise<void> {
@@ -121,7 +214,6 @@ export async function startHost(): Promise<void> {
   }
 
   const paths = hostPaths(LEG);
-  const port = PORTS[LEG];
 
   if (!existsSync(paths.executable)) {
     throw new Error(
@@ -129,59 +221,60 @@ export async function startHost(): Promise<void> {
     );
   }
 
-  const environment = {
-    ...process.env,
-    ASPNETCORE_ENVIRONMENT: "Development",
-    ASPNETCORE_URLS: `http://localhost:${port}`,
-  };
-
-  let command: string;
-  let args: string[];
+  const hosts = specs();
 
   if (COVERAGE && LEG === "net10") {
-    // The shape the task asked for. dotnet-coverage launches the target itself and
-    // writes the report when that process exits, which is why stopHost has to end
-    // the host politely rather than killing the collector.
-    command = "dotnet-coverage";
-    args = [
-      "collect",
-      `dotnet ${paths.dll}`,
-      "--session-id",
-      COVERAGE_SESSION,
-      "--output-format",
-      "cobertura",
-      "--output",
-      COVERAGE_OUTPUT,
-    ];
+    // Server mode, then one `connect` per host. `collect <command>` measures a single
+    // launched process; the Edupass provider needs a second one, and both have to land
+    // in the same report or the library's coverage is split across two files.
+    spawnChild(
+      "dotnet-coverage",
+      [
+        "collect",
+        "--server-mode",
+        "--session-id",
+        COVERAGE_SESSION,
+        "--settings",
+        COVERAGE_SETTINGS,
+        "--output-format",
+        "cobertura",
+        "--output",
+        COVERAGE_OUTPUT,
+      ],
+      paths,
+      process.env,
+    );
     collecting = true;
-  } else if (LEG === "net48") {
-    command = paths.executable;
-    args = [`http://localhost:${port}`];
-  } else {
-    command = paths.executable;
-    args = [];
+
+    // The server has to be listening before a connect can find it.
+    await new Promise((done) => setTimeout(done, 3_000));
   }
 
-  // Pipes are attached only when asked for. An open pipe to a live child keeps this
-  // process's event loop alive, so vitest reports that something is preventing the
-  // Vite server from exiting - and the run hangs for ten seconds at the end.
-  const logging = process.env["SCIM_HOST_LOG"] === "1";
+  for (const host of hosts) {
+    const environment = {
+      ...process.env,
+      ...host.environment,
+      ASPNETCORE_ENVIRONMENT: "Development",
+      ASPNETCORE_URLS: `http://localhost:${host.port}`,
+    };
 
-  host = spawn(command, args, {
-    cwd: paths.workingDirectory,
-    env: environment,
-    stdio: logging ? ["ignore", "pipe", "pipe"] : "ignore",
-    shell: process.platform === "win32",
-  });
-
-  if (logging) {
-    host.stdout?.on("data", (chunk: Buffer) => process.stdout.write(`[host] ${chunk}`));
-    host.stderr?.on("data", (chunk: Buffer) => process.stderr.write(`[host:err] ${chunk}`));
+    if (collecting) {
+      spawnChild(
+        "dotnet-coverage",
+        ["connect", COVERAGE_SESSION, "dotnet", paths.dll],
+        paths,
+        environment,
+      );
+    } else if (LEG === "net48") {
+      spawnChild(paths.executable, [`http://localhost:${host.port}`], paths, environment);
+    } else {
+      spawnChild(paths.executable, [], paths, environment);
+    }
   }
 
-  host.unref();
-
-  await waitUntilReachable(`http://localhost:${port}/scim/ServiceProviderConfig`);
+  for (const host of hosts) {
+    await waitUntilReachable(`http://localhost:${host.port}/scim/ServiceProviderConfig`);
+  }
 }
 
 function shutdownCollection(): Promise<void> {
@@ -192,46 +285,77 @@ function shutdownCollection(): Promise<void> {
     });
     shutdown.once("exit", () => done());
     shutdown.once("error", () => done());
-    setTimeout(done, 60_000);
+    setTimeout(done, 120_000);
   });
 }
 
-export async function stopHost(): Promise<void> {
-  if (!host || host.exitCode !== null) {
-    return;
-  }
-
-  const exited = new Promise<void>((done) => host?.once("exit", () => done()));
-
-  if (collecting) {
-    // Ends the collection, which stops the target and writes the report. Killing the
-    // tree instead leaves the report unwritten.
-    await shutdownCollection();
-    await Promise.race([exited, new Promise((done) => setTimeout(done, 30_000))]);
-  }
-
-  if (host.exitCode !== null) {
-    host.stdout?.destroy();
-    host.stderr?.destroy();
-    host = undefined;
+function kill(child: ChildProcess): void {
+  if (child.exitCode !== null || child.pid === undefined) {
     return;
   }
 
   if (process.platform === "win32") {
-    // /T so the tree goes with it: under coverage the host is a grandchild of this
-    // process, and killing only the collector would leave the host holding the port
-    // and the report unwritten.
-    const killer = spawn("taskkill", ["/PID", String(host.pid), "/T", "/F"], {
-      stdio: "ignore",
-    });
+    // /T so the tree goes with it: under coverage each host is a grandchild of this
+    // process, and killing only the collector would leave a host holding its port.
+    const killer = spawn("taskkill", ["/PID", String(child.pid), "/T", "/F"], { stdio: "ignore" });
     killer.unref();
   } else {
-    host.kill("SIGTERM");
+    child.kill("SIGTERM");
+  }
+}
+
+/**
+ * Kills whatever is listening on a port.
+ *
+ * `shell: true` on Windows means the tracked child is the shell, not the host, and a
+ * tree kill through it is unreliable enough that hosts survived the run - holding the
+ * port and locking the assembly the next build has to overwrite. The port is the one
+ * handle that identifies the process we actually started.
+ */
+function killByPort(port: number): Promise<void> {
+  if (process.platform !== "win32") {
+    return new Promise((done) => {
+      const killer = spawn("sh", ["-c", `fuser -k ${port}/tcp 2>/dev/null || true`], {
+        stdio: "ignore",
+      });
+      killer.once("exit", () => done());
+      killer.once("error", () => done());
+    });
   }
 
-  await Promise.race([exited, new Promise((done) => setTimeout(done, 30_000))]);
+  const script =
+    `Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | ` +
+    `ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }`;
 
-  host.stdout?.destroy();
-  host.stderr?.destroy();
-  host = undefined;
+  return new Promise((done) => {
+    const killer = spawn("powershell", ["-NoProfile", "-Command", script], { stdio: "ignore" });
+    killer.once("exit", () => done());
+    killer.once("error", () => done());
+    setTimeout(done, 20_000);
+  });
+}
+
+export async function stopHost(): Promise<void> {
+  const running = children;
+  children = [];
+
+  if (collecting) {
+    // Ends the collection, which stops the connected hosts and writes the report.
+    // Killing the tree instead leaves the report unwritten.
+    await shutdownCollection();
+    await new Promise((done) => setTimeout(done, 2_000));
+    collecting = false;
+  }
+
+  for (const child of running) {
+    kill(child);
+    child.stdout?.destroy();
+    child.stderr?.destroy();
+  }
+
+  if (!EXTERNAL_BASE_URL) {
+    for (const host of specs()) {
+      await killByPort(host.port);
+    }
+  }
 }

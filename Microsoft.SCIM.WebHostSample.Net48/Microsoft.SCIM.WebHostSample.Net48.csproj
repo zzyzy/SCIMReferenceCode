@@ -35,6 +35,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Microsoft.SCIM.AspNet\Microsoft.SCIM.AspNet.csproj" />
+    <!-- Selected at startup by SCIM_PROVIDER=edupass; see Startup.cs. -->
+    <ProjectReference Include="..\SCIM.EduPass\SCIM.EduPass.csproj" />
   </ItemGroup>
 
   <!--
