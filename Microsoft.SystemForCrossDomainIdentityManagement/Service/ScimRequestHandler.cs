@@ -133,7 +133,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.DeleteArgumentException,
                     argumentException,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 return ScimResult.Status(HttpStatusCode.BadRequest);
             }
@@ -151,7 +152,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.DeleteNotImplementedException,
                     notImplementedException,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 throw new HttpResponseException(HttpStatusCode.NotImplemented);
             }
@@ -160,7 +162,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.DeleteNotSupportedException,
                     notSupportedException,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 throw new HttpResponseException(HttpStatusCode.NotImplemented);
             }
@@ -169,7 +172,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.DeleteException,
                     exception,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 // A SCIM error body, as the query and replace handlers already answer for
                 // the same exception. Rethrowing let a provider's exception out of the SCIM
@@ -221,7 +225,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.QueryArgumentException,
                     argumentException,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 return ScimResult.Error(HttpStatusCode.BadRequest, argumentException.Message);
             }
@@ -230,7 +235,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.QueryNotImplementedException,
                     notImplementedException,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 return ScimResult.Error(HttpStatusCode.NotImplemented, notImplementedException.Message);
             }
@@ -239,7 +245,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.QueryNotSupportedException,
                     notSupportedException,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 // A provider rejects a filter it cannot honour by throwing NotSupportedException.
                 return ScimResult.Error(
@@ -260,7 +267,8 @@ namespace Microsoft.SCIM
                     this.Logger.LogScimFailure(
                         ScimEventIds.GetException,
                         responseException.InnerException ?? responseException,
-                        correlationIdentifier);
+                        correlationIdentifier,
+                        request);
                 }
 
                 return ScimResult.FromException(responseException);
@@ -270,7 +278,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.QueryException,
                     exception,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 return ScimResult.Error(HttpStatusCode.InternalServerError, exception.Message);
             }
@@ -369,7 +378,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.GetArgumentException,
                     argumentException,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 return ScimResult.Error(HttpStatusCode.BadRequest, argumentException.Message);
             }
@@ -378,7 +388,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.GetNotImplementedException,
                     notImplementedException,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 return ScimResult.Error(HttpStatusCode.NotImplemented, notImplementedException.Message);
             }
@@ -387,7 +398,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.GetNotSupportedException,
                     notSupportedException,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 return ScimResult.Error(HttpStatusCode.BadRequest, notSupportedException.Message);
             }
@@ -398,7 +410,8 @@ namespace Microsoft.SCIM
                     this.Logger.LogScimFailure(
                         ScimEventIds.GetException,
                         responseException.InnerException ?? responseException,
-                        correlationIdentifier);
+                        correlationIdentifier,
+                        request);
                 }
 
                 if (responseException.Response?.StatusCode == HttpStatusCode.NotFound)
@@ -413,7 +426,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.GetException,
                     exception,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 return ScimResult.Error(HttpStatusCode.InternalServerError, exception.Message);
             }
@@ -461,7 +475,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.PatchArgumentException,
                     argumentException,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 // On a PATCH the argument that is nearly always wrong is the operation path.
                 return ScimResult.Error(
@@ -474,7 +489,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.PatchNotImplementedException,
                     notImplementedException,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 throw new HttpResponseException(HttpStatusCode.NotImplemented);
             }
@@ -483,7 +499,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.PatchNotSupportedException,
                     notSupportedException,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 throw new HttpResponseException(HttpStatusCode.NotImplemented);
             }
@@ -498,7 +515,8 @@ namespace Microsoft.SCIM
                     this.Logger.LogScimFailure(
                         ScimEventIds.GetException,
                         responseException.InnerException ?? responseException,
-                        correlationIdentifier);
+                        correlationIdentifier,
+                        request);
                 }
 
                 throw;
@@ -508,7 +526,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.PatchException,
                     exception,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 // A SCIM error body, as the query and replace handlers already answer for
                 // the same exception. Rethrowing let a provider's exception out of the SCIM
@@ -611,7 +630,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.PostArgumentException,
                     argumentException,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 return ScimResult.Status(HttpStatusCode.BadRequest);
             }
@@ -620,7 +640,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.PostNotImplementedException,
                     notImplementedException,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 throw new HttpResponseException(HttpStatusCode.NotImplemented);
             }
@@ -629,7 +650,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.PostNotSupportedException,
                     notSupportedException,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 throw new HttpResponseException(HttpStatusCode.NotImplemented);
             }
@@ -638,7 +660,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.PostNotSupportedException,
                     httpResponseException,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 if (httpResponseException.Response.StatusCode == HttpStatusCode.Conflict)
                     return ScimResult.Status(HttpStatusCode.Conflict);
@@ -650,7 +673,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.PostException,
                     exception,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 // A SCIM error body, as the query and replace handlers already answer for
                 // the same exception. Rethrowing let a provider's exception out of the SCIM
@@ -727,7 +751,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.PutArgumentException,
                     argumentException,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 return ScimResult.Error(HttpStatusCode.BadRequest, argumentException.Message);
             }
@@ -736,7 +761,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.PutNotImplementedException,
                     notImplementedException,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 return ScimResult.Error(HttpStatusCode.NotImplemented, notImplementedException.Message);
             }
@@ -745,7 +771,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.PutNotSupportedException,
                     notSupportedException,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 // 501, as POST, GET, PATCH and DELETE all answer for the same exception.
                 // ProviderBase's own replace throws it, so a provider that has not written
@@ -758,7 +785,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.PostNotSupportedException,
                     httpResponseException,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 if (httpResponseException.Response.StatusCode == HttpStatusCode.NotFound)
                     return ScimResult.Error(HttpStatusCode.NotFound, string.Format(SystemForCrossDomainIdentityManagementServiceResources.ResourceNotFoundTemplate, identifier));
@@ -777,7 +805,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.PutException,
                     exception,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 return ScimResult.Error(HttpStatusCode.InternalServerError, exception.Message);
             }

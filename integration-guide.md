@@ -219,7 +219,115 @@ provider rather than you hand-rolling one — `app.UseJsonWebKeySetAuthenticatio
 Do not copy the samples' symmetric signing key - it is a committed dummy, and anyone reading
 this repository can mint a token with it.
 
-## Step 5 — fix IIS for PUT, PATCH and DELETE
+## Step 5 — logging
+
+The SCIM layer writes to **your** `ILogger`. The controllers resolve `ILogger<T>` from the
+container and hand it to the request handlers, so whatever provider you have registered
+receives every SCIM event — nothing else to wire up:
+
+```csharp
+services.AddLogging(builder => builder.AddSerilog());   // or NLog, or your own provider
+```
+
+Pass no logger and the handlers stay silent; a null logger is tolerated throughout.
+
+### What the library logs, and what it does not
+
+The library logs **failed operations only**. Logging every request and response is yours to
+configure — IIS logging, Application Insights, Serilog request logging, or an OWIN middleware
+of your own — and the library deliberately stays out of it. Nothing about that logging is
+SCIM-specific, and its retention and privacy policy is yours, not a library's.
+
+What you *cannot* do from outside is log a SCIM failure. The handlers turn a provider's
+exception into a SCIM error response rather than letting it escape, so by the time any
+middleware sees the response there is nothing left to catch. So the library logs those, and
+logs them with the request that caused them:
+
+```
+SCIM operation failed. Correlation: 90c74a93-… POST https://host/scim/Users
+Headers: Content-Type: application/scim+json; Authorization: <redacted>; …
+Body: {"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"a@b.example",…}
+```
+
+A status and a stack trace rarely say what a client actually sent, and Entra ID will not tell
+you either.
+
+**This is always on.** There is no switch, because an operator who quietens the routine
+logging has not asked to be told less about the thing that broke. The body is written
+**verbatim** — including anything the client put in `password` — so treat these entries as
+carrying whatever your callers provision. Header values for `Authorization`,
+`Proxy-Authorization`, `Cookie` and `Set-Cookie` are replaced with `<redacted>`; an earlier
+version wrote the whole header dictionary and put the caller's bearer token in the log on
+every request.
+
+The one setting is the ceiling, set during startup next to your `Configure` call:
+
+```csharp
+ScimLogging.MaximumBodyLength = 64 * 1024;   // a tighter ceiling than the 10 MB default
+```
+
+A body longer than the ceiling is written up to it and marked `<truncated, …>`, so a cut-off
+body is never mistaken for the whole one.
+
+The library buffers the request body so that it is still readable after model binding — that
+is the mechanism this needs, not a feature, and it is why the ceiling is the only knob.
+
+**Buffering is skipped when nothing would write the entry.** Before copying anything, the
+library asks your logger whether `Error` is enabled for the category the failure would be
+logged under, and does nothing if it is not. Silence the SCIM logging and you pay none of the
+cost:
+
+```json
+{ "Logging": { "LogLevel": { "Microsoft.SCIM": "None" } } }
+```
+
+On ASP.NET Core the category checked is the controller's own, so silencing one SCIM endpoint
+and not another gives the right answer for each. On ASP.NET 4.8 the check happens before Web
+API has selected a controller, so there is no controller type to name yet and the check is
+made against `Microsoft.SCIM` — set the level there on that leg, not on an individual
+controller beneath it.
+
+One thing to know on ASP.NET 4.8: a `Logging` section in `appsettings` reaches
+`IConfiguration` but not the logging builder unless you say so. The samples do:
+
+```csharp
+services.AddLogging(builder =>
+{
+    builder.AddConfiguration(configuration.GetSection("Logging"));   // easy to leave out
+    builder.AddConsole();
+});
+```
+
+Without that line the section is read and ignored, and every level you set there has no
+effect on this leg while having every effect on the ASP.NET Core one.
+
+### Logging requests and responses yourself
+
+On ASP.NET Core that is `UseHttpLogging`, and `Microsoft.SCIM.WebHostSample/Program.cs` shows
+it wired up — including the fields, the body limits and the header allow-list:
+
+```csharp
+builder.Services.AddHttpLogging(options =>
+{
+    options.LoggingFields = HttpLoggingFields.RequestMethod | HttpLoggingFields.RequestPath
+        | HttpLoggingFields.RequestHeaders | HttpLoggingFields.ResponseStatusCode
+        | HttpLoggingFields.RequestBody | HttpLoggingFields.ResponseBody;
+    options.RequestBodyLogLimit = 64 * 1024;
+    options.MediaTypeOptions.AddText("application/scim+json");   // or bodies are skipped
+});
+
+app.UseHttpLogging();
+```
+
+Two things that catch people out: `HttpLogging` logs at `Information` under
+`Microsoft.AspNetCore.HttpLogging`, which a blanket `"Microsoft": "Warning"` filter hides; and
+it will not log a body whose media type it has not been told is text, which
+`application/scim+json` is not by default.
+
+On ASP.NET 4.8 there is no built-in equivalent — use IIS logging, Application Insights, or an
+OWIN middleware of your own.
+
+## Step 6 — fix IIS for PUT, PATCH and DELETE
 
 IIS blocks these verbs by default, and SCIM needs all of them. Symptom: `GET` and `POST`
 work, everything else returns 405 without reaching your code.
@@ -262,7 +370,7 @@ With a valid bearer token, in this order:
 11. `PATCH` a path your resource type does not model → 400 `invalidPath`, nothing applied.
 
 If step 3 returns 500, your provider threw something that is not an
-`HttpResponseException`. If steps 6 and 7 return 405, revisit step 5. Steps 9 to 11 used to
+`HttpResponseException`. If steps 6 and 7 return 405, revisit step 6. Steps 9 to 11 used to
 answer success while doing nothing, so check them explicitly — the old failure mode was
 silence.
 
@@ -275,7 +383,7 @@ silence.
 | --- | --- |
 | 401 on every request | No authentication configured on the pipeline serving `/scim`. |
 | 404 on every SCIM route | `Microsoft.SCIM.AspNet.dll` is missing from `bin`, or `MapHttpAttributeRoutes()` was never called. |
-| 405 on PUT/PATCH/DELETE | IIS WebDAV module — step 5. |
-| 500 instead of 404 or 409 | Provider threw a plain exception instead of `HttpResponseException`. |
+| 405 on PUT/PATCH/DELETE | IIS WebDAV module — step 6. |
+| 500 instead of 404 or 409 | Provider threw a plain exception instead of `HttpResponseException`. The log carries the request that caused it — step 5. |
 | Your other controllers change behaviour | Option B side effects — switch to Option A. |
 | Nothing survives a restart | You are still using `InMemoryProvider`. |

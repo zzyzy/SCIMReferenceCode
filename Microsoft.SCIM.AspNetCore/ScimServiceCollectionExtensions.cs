@@ -103,6 +103,12 @@ namespace Microsoft.SCIM
             void ConfigureMvcOptions(MvcOptions options)
             {
                 options.Filters.Add(new ScimExceptionFilter());
+
+                // Before model binding, so that the failure logging can still read the body
+                // an action's [FromBody] parameter was bound from. See
+                // ScimRequestBufferingFilter.
+                options.Filters.Add(new ScimRequestBufferingFilter());
+
                 options.Conventions.Add(new ScimRouteConvention());
             }
 

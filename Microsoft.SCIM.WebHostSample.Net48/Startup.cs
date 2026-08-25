@@ -57,19 +57,52 @@ namespace Microsoft.SCIM.WebHostSample
             // bridging MEDI onto Web API's IDependencyResolver.
             ServiceCollection services = new ServiceCollection();
             services.AddSingleton(typeof(IProvider), provider);
-            services.AddLogging(builder => builder.AddConsole());
+            // AddConfiguration, not just AddConsole: without it the Logging section of
+            // appsettings is read into IConfiguration and then ignored, so a level set there -
+            // or through Logging__LogLevel__* in the environment - has no effect on this leg
+            // while having every effect on the net10.0 one. The two samples claim the same
+            // appsettings layering; this is what makes that true of logging as well.
+            services.AddLogging(
+                builder =>
+                {
+                    builder.AddConfiguration(configuration.GetSection("Logging"));
+                    builder.AddConsole();
+                });
             services.AddSingleton(typeof(IConfiguration), configuration);
             IServiceProvider serviceProvider = services.BuildServiceProvider();
 
-            app.Use<RequestLoggingMiddleware>(
-                serviceProvider.GetRequiredService<ILoggerFactory>()
-                    .CreateLogger<RequestLoggingMiddleware>());
+            // Logging each request and response is the host's job, not the SCIM library's.
+            // On this leg that is IIS logging, Application Insights, or an OWIN middleware of
+            // your own; on the net10.0 sample it is app.UseHttpLogging(). What the library
+            // logs, because a host cannot, is a failed SCIM operation - with the request that
+            // caused it. See ScimLogging.
 
             Startup.ConfigureAuthentication(app, configuration, isDevelopment);
 
             HttpConfiguration httpConfiguration = new HttpConfiguration();
             ScimHttpConfiguration.Configure(httpConfiguration, serviceProvider);
+
             app.UseWebApi(httpConfiguration);
+        }
+
+        /// <summary>
+        /// The one SCIM logging setting: the ceiling on a logged request body.
+        /// </summary>
+        /// <remarks>
+        /// There is no switch for whether requests are logged. On this leg that is IIS
+        /// logging, Application Insights or an OWIN middleware of the host's own - the SCIM
+        /// library logs only a failed operation, which a host cannot see.
+        /// </remarks>
+        private static void ConfigureLogging(IConfiguration configuration)
+        {
+            string maximum = configuration["SCIM_LOG_MAXIMUM_BODY_LENGTH"];
+
+            if (!string.IsNullOrWhiteSpace(maximum)
+                && int.TryParse(maximum, out int parsed)
+                && parsed > 0)
+            {
+                ScimLogging.MaximumBodyLength = parsed;
+            }
         }
 
         private static void ConfigureAuthentication(

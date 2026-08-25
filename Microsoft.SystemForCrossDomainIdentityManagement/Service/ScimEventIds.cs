@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
+﻿// Copyright (c) Microsoft Corporation.// Licensed under the MIT license.
 
 namespace Microsoft.SCIM
 {
@@ -10,7 +10,8 @@ namespace Microsoft.SCIM
     /// <remarks>
     /// These replace the <c>ServiceNotificationIdentifiers</c> constants that the deleted
     /// <c>IMonitor</c> surface used. The numeric values are carried over unchanged so that
-    /// anything already filtering or alerting on them keeps working; 36 and 37 stay retired.
+    /// anything already filtering or alerting on them keeps working; 36 and 37 stay retired,
+    /// and 29 to 31 joined them when per-request logging moved out to the host.
     /// </remarks>
     public static class ScimEventIds
     {
@@ -49,9 +50,10 @@ namespace Microsoft.SCIM
         public static readonly EventId QueryNotSupportedException = new EventId(27, nameof(QueryNotSupportedException));
         public static readonly EventId QueryException = new EventId(28, nameof(QueryException));
 
-        public static readonly EventId RequestPipelineException = new EventId(29, nameof(RequestPipelineException));
-        public static readonly EventId RequestReceived = new EventId(30, nameof(RequestReceived));
-        public static readonly EventId RequestProcessed = new EventId(31, nameof(RequestProcessed));
+        // 29, 30 and 31 are retired, alongside 36 and 37. They belonged to the per-request
+        // logging this library used to do, which is the host's job - ASP.NET Core's
+        // UseHttpLogging, IIS logging, or an OWIN middleware of the host's own. What remains
+        // here is what a host cannot log: a failed SCIM operation.
 
         public static readonly EventId ResourceTypesGetArgumentException = new EventId(32, nameof(ResourceTypesGetArgumentException));
         public static readonly EventId ResourceTypesGetException = new EventId(33, nameof(ResourceTypesGetException));

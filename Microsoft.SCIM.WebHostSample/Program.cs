@@ -11,6 +11,7 @@ namespace Microsoft.SCIM.WebHostSample
     using Microsoft.AspNetCore.Authentication.JwtBearer;
     using Microsoft.AspNetCore.Builder;
     using Microsoft.AspNetCore.Hosting;
+    using Microsoft.AspNetCore.HttpLogging;
     using Microsoft.Extensions.Configuration;
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.Hosting;
@@ -81,13 +82,30 @@ namespace Microsoft.SCIM.WebHostSample
             // Registers the provider, the monitor, the SCIM controllers (which live in
             // Microsoft.SCIM.AspNetCore, not in this assembly), the Newtonsoft settings and
             // the HttpResponseException filter.
+            Program.ConfigureScimLogging(configuration);
+
             builder.Services.AddScim(new InMemoryProvider());
+
+            // Request and response logging, which is the host's to configure - the SCIM
+            // library logs only what a host cannot see, a failed operation. See
+            // ConfigureHttpLogging.
+            bool logRequests = Program.Enabled(configuration["SCIM_LOG_REQUESTS"]);
+            if (logRequests)
+            {
+                builder.Services.AddHttpLogging(
+                    (HttpLoggingOptions options) => Program.ConfigureHttpLogging(options, configuration));
+            }
 
             WebApplication app = builder.Build();
 
             if (environment.IsDevelopment())
             {
                 app.UseDeveloperExceptionPage();
+            }
+
+            if (logRequests)
+            {
+                app.UseHttpLogging();
             }
 
             // Deliberately no UseHsts() and no UseHttpsRedirection(): both samples are
@@ -108,6 +126,73 @@ namespace Microsoft.SCIM.WebHostSample
                         string.Join(", ", app.Urls.DefaultIfEmpty("(see launchSettings.json)"))));
 
             app.Run();
+        }
+
+        /// <summary>
+        /// The one SCIM logging setting: the ceiling on a logged request body.
+        /// </summary>
+        /// <remarks>
+        /// A sample reads it from configuration so that it can be exercised without a rebuild;
+        /// a real host would more likely set it outright. Either way it is set before AddScim,
+        /// and so before the first request.
+        ///
+        /// There is no switch for whether requests are logged. That is this host's decision,
+        /// and this host makes it with UseHttpLogging below - see ConfigureHttpLogging.
+        /// </remarks>
+        private static void ConfigureScimLogging(IConfiguration configuration)
+        {
+            string maximum = configuration["SCIM_LOG_MAXIMUM_BODY_LENGTH"];
+
+            if (!string.IsNullOrWhiteSpace(maximum)
+                && int.TryParse(maximum, out int parsed)
+                && parsed > 0)
+            {
+                ScimLogging.MaximumBodyLength = parsed;
+            }
+        }
+
+        /// <summary>
+        /// Request and response logging, which belongs to the host rather than to the SCIM
+        /// library.
+        /// </summary>
+        /// <remarks>
+        /// Shown here because a reference implementation should show it: this is what a
+        /// consumer wires up, and every switch a consumer might want - which fields, whether
+        /// bodies, how much of them, which headers survive redaction - is already an option
+        /// here rather than something the library reinvents.
+        ///
+        /// Off unless SCIM_LOG_REQUESTS says otherwise, because a body carries whatever the
+        /// caller provisions and a sample should not write that by default.
+        ///
+        /// HttpLogging redacts every header it is not told to keep, which is the opposite
+        /// default to the SCIM failure logging: that one names the few it replaces, because an
+        /// entry about a failure is worth less with its headers blanked.
+        /// </remarks>
+        private static void ConfigureHttpLogging(HttpLoggingOptions options, IConfiguration configuration)
+        {
+            options.LoggingFields =
+                HttpLoggingFields.RequestMethod
+                | HttpLoggingFields.RequestPath
+                | HttpLoggingFields.RequestQuery
+                | HttpLoggingFields.RequestHeaders
+                | HttpLoggingFields.ResponseStatusCode
+                | HttpLoggingFields.ResponseHeaders;
+
+            if (Program.Enabled(configuration["SCIM_LOG_BODIES"]))
+            {
+                options.LoggingFields |= HttpLoggingFields.RequestBody | HttpLoggingFields.ResponseBody;
+            }
+
+            options.RequestBodyLogLimit = ScimLogging.MaximumBodyLength;
+            options.ResponseBodyLogLimit = ScimLogging.MaximumBodyLength;
+
+            options.MediaTypeOptions.AddText(ProtocolConstants.ContentType);
+        }
+
+        private static bool Enabled(string value)
+        {
+            return string.Equals(value, "1", System.StringComparison.Ordinal)
+                || string.Equals(value, "true", System.StringComparison.OrdinalIgnoreCase);
         }
 
         private static Task AuthenticationFailed(AuthenticationFailedContext arg)

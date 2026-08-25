@@ -1,4 +1,4 @@
-//------------------------------------------------------------
+﻿//------------------------------------------------------------
 // Copyright (c) Microsoft Corporation.  All rights reserved.
 //------------------------------------------------------------
 
@@ -73,13 +73,25 @@ namespace Microsoft.SCIM.WebHostSample.IIS
 
             ServiceCollection services = new ServiceCollection();
             services.AddSingleton(typeof(IProvider), provider);
-            services.AddLogging(builder => builder.AddConsole());
+            // AddConfiguration, not just AddConsole: without it the Logging section of
+            // appsettings is read into IConfiguration and then ignored, so a level set there -
+            // or through Logging__LogLevel__* in the environment - has no effect on this leg
+            // while having every effect on the net10.0 one. The two samples claim the same
+            // appsettings layering; this is what makes that true of logging as well.
+            services.AddLogging(
+                builder =>
+                {
+                    builder.AddConfiguration(configuration.GetSection("Logging"));
+                    builder.AddConsole();
+                });
             services.AddSingleton(typeof(IConfiguration), configuration);
             IServiceProvider serviceProvider = services.BuildServiceProvider();
 
-            app.Use<RequestLoggingMiddleware>(
-                serviceProvider.GetRequiredService<ILoggerFactory>()
-                    .CreateLogger<RequestLoggingMiddleware>());
+            // Logging each request and response is the host's job, not the SCIM library's.
+            // On this leg that is IIS logging, Application Insights, or an OWIN middleware of
+            // your own; on the net10.0 sample it is app.UseHttpLogging(). What the library
+            // logs, because a host cannot, is a failed SCIM operation - with the request that
+            // caused it. See ScimLogging.
 
             ScimStartup.ConfigureAuthentication(app, configuration, isDevelopment);
 

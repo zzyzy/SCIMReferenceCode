@@ -72,7 +72,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.SchemasGetArgumentException,
                     argumentException,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 throw new HttpResponseException(HttpStatusCode.BadRequest);
             }
@@ -81,7 +82,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.SchemasGetNotImplementedException,
                     notImplementedException,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 throw new HttpResponseException(HttpStatusCode.NotImplemented);
             }
@@ -90,7 +92,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.SchemasGetNotSupportedException,
                     notSupportedException,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 throw new HttpResponseException(HttpStatusCode.NotImplemented);
             }
@@ -105,7 +108,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.SchemasGetException,
                     exception,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 // A SCIM error body, as the query and replace handlers already answer for
                 // the same exception. Rethrowing let a provider's exception out of the SCIM
@@ -148,7 +152,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.ResourceTypesGetArgumentException,
                     argumentException,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 throw new HttpResponseException(HttpStatusCode.BadRequest);
             }
@@ -157,7 +162,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.ResourceTypesGetNotImplementedException,
                     notImplementedException,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 throw new HttpResponseException(HttpStatusCode.NotImplemented);
             }
@@ -166,7 +172,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.ResourceTypesGetNotSupportedException,
                     notSupportedException,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 throw new HttpResponseException(HttpStatusCode.NotImplemented);
             }
@@ -181,7 +188,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.ResourceTypesGetException,
                     exception,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 // A SCIM error body, as the query and replace handlers already answer for
                 // the same exception. Rethrowing let a provider's exception out of the SCIM
@@ -218,7 +226,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.ServiceProviderConfigurationGetArgumentException,
                     argumentException,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 throw new HttpResponseException(HttpStatusCode.BadRequest);
             }
@@ -227,7 +236,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.ServiceProviderConfigurationGetNotImplementedException,
                     notImplementedException,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 throw new HttpResponseException(HttpStatusCode.NotImplemented);
             }
@@ -236,7 +246,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.ServiceProviderConfigurationGetNotSupportedException,
                     notSupportedException,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 throw new HttpResponseException(HttpStatusCode.NotImplemented);
             }
@@ -251,7 +262,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.ServiceProviderConfigurationGetException,
                     exception,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 // A SCIM error body, as the query and replace handlers already answer for
                 // the same exception. Rethrowing let a provider's exception out of the SCIM
@@ -295,7 +307,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.BulkRequestPostArgumentException,
                     argumentException,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 throw new HttpResponseException(HttpStatusCode.BadRequest);
             }
@@ -304,7 +317,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.BulkRequestPostNotImplementedException,
                     notImplementedException,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 throw new HttpResponseException(HttpStatusCode.NotImplemented);
             }
@@ -313,7 +327,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.BulkRequestPostNotSupportedException,
                     notSupportedException,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 throw new HttpResponseException(HttpStatusCode.NotImplemented);
             }
@@ -329,7 +344,8 @@ namespace Microsoft.SCIM
                 this.Logger.LogScimFailure(
                     ScimEventIds.BulkRequestPostException,
                     exception,
-                    correlationIdentifier);
+                    correlationIdentifier,
+                    request);
 
                 // A SCIM error body, as the query and replace handlers already answer for
                 // the same exception. Rethrowing let a provider's exception out of the SCIM

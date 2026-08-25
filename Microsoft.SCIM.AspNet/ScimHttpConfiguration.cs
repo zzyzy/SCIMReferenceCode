@@ -137,6 +137,10 @@ namespace Microsoft.SCIM
 
             configuration.MessageHandlers.Insert(0, new ScimHeadRequestHandler());
 
+            // Before the formatter reads the body, so that the failure logging can read it
+            // afterwards. See ScimRequestBufferingHandler and ScimLoggerExtensions.
+            configuration.MessageHandlers.Add(new ScimRequestBufferingHandler());
+
             return configuration;
         }
     }
