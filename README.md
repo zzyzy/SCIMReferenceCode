@@ -134,7 +134,9 @@ nothing left to catch.
 - `ScimEventIds` names the events (`PostException`, `PatchNotSupportedException`, …) so you can
   filter on them.
 - `ScimLogging` holds the process-wide knobs: `MaximumBodyLength` (default 10 MB) and
-  `RedactedHeaders` (`Authorization`, `Proxy-Authorization`, `Cookie`, `Set-Cookie`). Bodies are
+  `RedactedHeaders` (`Authorization`, `Proxy-Authorization`, `Cookie`, `Set-Cookie`), which a
+  host extends with `ScimLogging.AddRedactedHeader` when its credential travels in a header of
+  its own. Bodies are
   logged verbatim — reproducing a failure means seeing what was sent — but credentials in
   headers are replaced.
 - The logger is **yours**. Controllers resolve `ILogger<T>` from the container and hand it to
@@ -255,7 +257,7 @@ step-by-step.
 | `suppressedControllerTypes` | replace a built-in controller with your own on the same route |
 | `pathPrefix` | serve SCIM under another segment, or at the application root with `""` |
 | `ScimTypedException` | return a precise `scimType` from your provider |
-| `ScimLogging.MaximumBodyLength` / `RedactedHeaders` | tune what failure logs contain |
+| `ScimLogging.MaximumBodyLength` / `RedactedHeaders` / `AddRedactedHeader` | tune what failure logs contain |
 | `IEduPassStore` | plug storage into `BaseEduPassScimProvider` without rewriting its rules |
 
 ### 4.6 Provider implementation

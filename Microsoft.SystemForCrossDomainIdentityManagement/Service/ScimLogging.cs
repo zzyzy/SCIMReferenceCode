@@ -1,4 +1,4 @@
-﻿//------------------------------------------------------------
+//------------------------------------------------------------
 // Copyright (c) Microsoft Corporation.  All rights reserved.
 //------------------------------------------------------------
 
@@ -53,22 +53,25 @@ namespace Microsoft.SCIM
         public const string NoBody = "<none>";
 
         /// <summary>
-        /// Header names whose values are replaced rather than written.
+        /// The header names redacted unless a host adds to them.
         /// </summary>
-        /// <remarks>
-        /// A body is logged verbatim - it is what the caller sent, and reproducing a failure
-        /// means seeing it - but a credential in a header is not part of the request being
-        /// diagnosed. An earlier version of the net48 request logging wrote the whole header
-        /// dictionary, which put the caller's bearer token in the log on every request.
-        /// </remarks>
-        public static readonly IReadOnlyCollection<string> RedactedHeaders =
-            new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        private static readonly string[] DefaultRedactedHeaders =
+            new[]
             {
                 "Authorization",
                 "Proxy-Authorization",
                 "Cookie",
                 "Set-Cookie",
             };
+
+        /// <remarks>
+        /// Replaced wholesale rather than mutated, so that <see cref="IsRedacted"/> can read it
+        /// without a lock while <see cref="AddRedactedHeader"/> is adding to it. Reading a
+        /// <see cref="HashSet{T}"/> during a concurrent write is undefined, and this is read on
+        /// every logged header.
+        /// </remarks>
+        private static volatile HashSet<string> redactedHeaders =
+            new HashSet<string>(ScimLogging.DefaultRedactedHeaders, StringComparer.OrdinalIgnoreCase);
 
         private static readonly object SyncRoot = new object();
 
@@ -108,11 +111,73 @@ namespace Microsoft.SCIM
             }
         }
 
+        /// <summary>
+        /// Header names whose values are replaced rather than written.
+        /// </summary>
+        /// <remarks>
+        /// A body is logged verbatim - it is what the caller sent, and reproducing a failure
+        /// means seeing it - but a credential in a header is not part of the request being
+        /// diagnosed. An earlier version of the net48 request logging wrote the whole header
+        /// dictionary, which put the caller's bearer token in the log on every request.
+        ///
+        /// Extend it with <see cref="AddRedactedHeader"/> rather than assuming the defaults
+        /// cover a deployment: they name the standard credential headers, and a relying party
+        /// that authenticates through a header of its own is not covered by any of them.
+        /// </remarks>
+        public static IReadOnlyCollection<string> RedactedHeaders
+        {
+            get
+            {
+                return ScimLogging.redactedHeaders;
+            }
+        }
+
+        /// <summary>
+        /// Also redacts <paramref name="headerName"/>, for a host whose credential does not
+        /// travel in one of the standard headers.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The defaults cover <c>Authorization</c> and friends, which is every credential the
+        /// samples use and none of the credentials a real relying party may have. An endpoint
+        /// authenticating with, say, <c>X-Api-Key</c> had no way to keep that key out of a
+        /// failure log: the header was written verbatim, and a failure log is exactly the file
+        /// most likely to be attached to a support ticket. Adding a header here is the fix, and
+        /// it belongs at startup beside the authentication configuration.
+        /// </para>
+        /// <para>
+        /// Idempotent, and matched case-insensitively as header names are.
+        /// </para>
+        /// </remarks>
+        /// <exception cref="ArgumentException"><paramref name="headerName"/> is null or blank.</exception>
+        public static void AddRedactedHeader(string headerName)
+        {
+            if (string.IsNullOrWhiteSpace(headerName))
+            {
+                throw new ArgumentException("A header name is required.", nameof(headerName));
+            }
+
+            lock (ScimLogging.SyncRoot)
+            {
+                if (ScimLogging.redactedHeaders.Contains(headerName))
+                {
+                    return;
+                }
+
+                HashSet<string> extended =
+                    new HashSet<string>(ScimLogging.redactedHeaders, StringComparer.OrdinalIgnoreCase)
+                    {
+                        headerName,
+                    };
+
+                ScimLogging.redactedHeaders = extended;
+            }
+        }
+
         /// <summary>Whether <paramref name="headerName"/>'s value is written or replaced.</summary>
         public static bool IsRedacted(string headerName)
         {
-            return null != headerName
-                && ((HashSet<string>)ScimLogging.RedactedHeaders).Contains(headerName);
+            return null != headerName && ScimLogging.redactedHeaders.Contains(headerName);
         }
     }
 }
