@@ -5,9 +5,11 @@
 namespace Microsoft.SCIM.WebHostSample
 {
     using System;
+    using System.Collections.Generic;
     using System.IO;
     using System.Text;
     using System.Web.Http;
+    using Anacle.ApiFramework.Authentication.ApiKey;
     using Microsoft.Extensions.Configuration;
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.Logging;
@@ -28,6 +30,7 @@ namespace Microsoft.SCIM.WebHostSample
     {
         private const string EnvironmentVariableName = "ASPNETCORE_ENVIRONMENT";
         private const string EnvironmentNameDevelopment = "Development";
+        private const string ApiKeyConfigurationKey = "SCIM_API_KEY";
 
         public void Configuration(IAppBuilder app)
         {
@@ -155,6 +158,24 @@ namespace Microsoft.SCIM.WebHostSample
             IConfiguration configuration,
             bool isDevelopment)
         {
+            // SCIM_API_KEY selects the API key mode instead of bearer tokens. One mode at a
+            // time on purpose: OWIN's JWT format throws on a token it cannot parse, so leaving
+            // the bearer middleware wired would make an API key sent as a bearer token fail
+            // there before the key middleware ever sees it.
+            string apiKey = configuration[Startup.ApiKeyConfigurationKey];
+
+            if (!string.IsNullOrWhiteSpace(apiKey))
+            {
+                IApiKeyStore store =
+                    new HashedApiKeyStore(
+                        new[] { new KeyValuePair<string, string>("sample", apiKey) });
+
+                app.Use<ApiKeyBearerMiddleware>(ApiKeyAuthenticationDefaults.HeaderName);
+                app.UseApiKeyAuthentication(store);
+
+                return;
+            }
+
             string issuer = configuration["Token:TokenIssuer"];
             string audience = configuration["Token:TokenAudience"];
             string signingKey = configuration["Token:IssuerSigningKey"];
