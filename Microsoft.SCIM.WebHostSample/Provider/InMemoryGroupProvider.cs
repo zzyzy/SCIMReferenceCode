@@ -81,9 +81,13 @@ namespace Microsoft.SCIM.WebHostSample.Provider
 
                 string identifier = resourceIdentifier.Identifier;
 
-                if (this.storage.Groups.ContainsKey(identifier))
+                // RFC 7644 3.6: a delete of a resource that is not there is a 404, not a
+                // success. Removing nothing and answering 204 told a client its delete had
+                // landed when the identifier it holds names no resource at all - and left it
+                // unable to tell a stale identifier from a live one.
+                if (!this.storage.Groups.Remove(identifier))
                 {
-                    this.storage.Groups.Remove(identifier);
+                    throw new HttpResponseException(HttpStatusCode.NotFound);
                 }
 
                 return Task.CompletedTask;
