@@ -132,6 +132,43 @@ function groupsOf(user: ScimResource): GroupsEntry[] | undefined {
 }
 
 // ---------------------------------------------------------------------------
+// The response body against what schemas declares
+// ---------------------------------------------------------------------------
+
+describe("Edupass conformance: the declared schemas", () => {
+  // "Each URN identifies a schema that defines the structure of the attributes present
+  // in the JSON response", and the specification's table of possible values for schemas
+  // lists only the core User schema and the Edupass extension. EduPassUser derives from
+  // Core2EnterpriseUser for its PATCH semantics, which used to put an empty
+  // "urn:...:enterprise:2.0:User" member on every response - an attribute keyed by a
+  // schema neither the response nor /Schemas declares.
+  it("carries no attribute keyed by a schema the response does not declare", async () => {
+    const created = await createEduUser();
+    const declared = new Set(created["schemas"] as string[]);
+
+    for (const key of Object.keys(created)) {
+      if (!key.startsWith("urn:")) {
+        continue;
+      }
+
+      expect(declared, `${key} is in the body but not in schemas`).toContain(key);
+    }
+  });
+
+  it("advertises every extension schema its responses carry", async () => {
+    const created = await createEduUser();
+    const advertised = new Set(
+      ((await edupass<{ Resources: AdvertisedSchema[] }>("GET", "/Schemas")).body.Resources ?? [])
+        .map((schema) => schema.id),
+    );
+
+    for (const key of Object.keys(created).filter((name) => name.startsWith("urn:"))) {
+      expect(advertised, `${key} is returned but not advertised at /Schemas`).toContain(key);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Get All Schemas
 // ---------------------------------------------------------------------------
 

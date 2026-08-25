@@ -719,6 +719,14 @@ describe("PATCH: addresses of every type", () => {
   });
 });
 
+/**
+ * An extension holding no values is omitted from the response rather than sent as `{}`,
+ * so a test that has just removed its last attribute must tolerate the member's absence.
+ */
+function enterpriseExtension(resource: Record<string, unknown>): any {
+  return (resource[SCHEMA_ENTERPRISE] as Record<string, unknown> | undefined) ?? {};
+}
+
 describe("PATCH: the enterprise extension", () => {
   it.each(["employeeNumber", "costCenter", "division", "department", "organization"])(
     "adds, replaces and removes %s",
@@ -727,15 +735,15 @@ describe("PATCH: the enterprise extension", () => {
       const path = `${SCHEMA_ENTERPRISE}:${attribute}`;
 
       expect(PATCH_APPLIED).toContain((await patch(user.id, { op: "add", path, value: "first" })).status);
-      expect(((await read(user.id))[SCHEMA_ENTERPRISE] as any)[attribute]).toBe("first");
+      expect(enterpriseExtension(await read(user.id))[attribute]).toBe("first");
 
       expect(PATCH_APPLIED).toContain(
         (await patch(user.id, { op: "replace", path, value: "second" })).status,
       );
-      expect(((await read(user.id))[SCHEMA_ENTERPRISE] as any)[attribute]).toBe("second");
+      expect(enterpriseExtension(await read(user.id))[attribute]).toBe("second");
 
       expect(PATCH_APPLIED).toContain((await patch(user.id, { op: "remove", path })).status);
-      expect(((await read(user.id))[SCHEMA_ENTERPRISE] as any)[attribute]).toBeUndefined();
+      expect(enterpriseExtension(await read(user.id))[attribute]).toBeUndefined();
     },
   );
 
@@ -748,7 +756,7 @@ describe("PATCH: the enterprise extension", () => {
       value: "Finance",
     });
 
-    expect(((await read(user.id))[SCHEMA_ENTERPRISE] as any).department).toBe("Engineering");
+    expect(enterpriseExtension(await read(user.id)).department).toBe("Engineering");
   });
 
   it("sets manager through the extension path", async () => {
@@ -765,7 +773,7 @@ describe("PATCH: the enterprise extension", () => {
       ).status,
     );
 
-    const extension = (await read(user.id))[SCHEMA_ENTERPRISE] as any;
+    const extension = enterpriseExtension(await read(user.id));
     expect(extension.manager?.value).toBe(manager.id);
   });
 
@@ -779,7 +787,7 @@ describe("PATCH: the enterprise extension", () => {
       value: manager.id,
     });
 
-    const extension = (await read(user.id))[SCHEMA_ENTERPRISE] as any;
+    const extension = enterpriseExtension(await read(user.id));
     expect(extension.manager?.value).toBe(manager.id);
   });
 
@@ -789,7 +797,7 @@ describe("PATCH: the enterprise extension", () => {
 
     await patch(user.id, { op: "remove", path: `${SCHEMA_ENTERPRISE}:manager` });
 
-    const extension = (await read(user.id))[SCHEMA_ENTERPRISE] as any;
+    const extension = enterpriseExtension(await read(user.id));
     expect(extension.manager?.value).toBeUndefined();
   });
 

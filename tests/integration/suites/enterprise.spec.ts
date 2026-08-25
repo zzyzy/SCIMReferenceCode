@@ -299,4 +299,32 @@ describe("Complex and multi-valued attributes", () => {
     expect(response.status).toBe(400);
     expect(response.body.scimType).toBe("invalidValue");
   });
+
+  it("omits the extension member when it holds no values", async () => {
+    // The property is instantiated so a PATCH has somewhere to land, which used to put
+    // "urn:...:enterprise:2.0:User": {} on every response. RFC 7643 3 keys an extension
+    // member by the schema it carries; an empty one carries none, and on a subclass whose
+    // schemas does not declare the URN it is an attribute of an undeclared schema.
+    const response = await scim("POST", "/Users", {
+      schemas: [SCHEMA_USER],
+      userName: `${unique("ent-empty")}@example.sg`,
+      active: true,
+    });
+
+    expect(response.status).toBe(201);
+    expect(response.body).not.toHaveProperty(SCHEMA_ENTERPRISE);
+  });
+
+  it("drops the member again once its last value is removed", async () => {
+    const created = (await scim("POST", "/Users", withExtension({ department: "Only" }))).body;
+
+    const response = await scim(
+      "PATCH",
+      `/Users/${created.id}`,
+      patchOp({ op: "remove", path: `${SCHEMA_ENTERPRISE}:department` }),
+    );
+
+    expect(PATCH_APPLIED).toContain(response.status);
+    expect(await readUser(created.id)).not.toHaveProperty(SCHEMA_ENTERPRISE);
+  });
 });

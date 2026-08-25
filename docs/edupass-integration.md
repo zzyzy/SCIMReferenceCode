@@ -143,6 +143,16 @@ captured into the dictionary; on write, the dictionary never overwrites a typed 
 untyped extension — which is the reason to clone with `ResourceCloner.Clone` rather than a
 hand-rolled JSON round trip.
 
+**An extension holding no values is omitted.** `EduPassUser` derives from
+`Core2EnterpriseUser` for its PATCH semantics, which instantiates the enterprise extension so
+that a PATCH against one of its attributes has somewhere to land. That put
+`"urn:ietf:params:scim:schemas:extension:enterprise:2.0:User": {}` on every Edupass response —
+an attribute keyed by a schema the response's own `schemas` does not declare and `/Schemas`
+does not advertise, where the specification says each URN in `schemas` is what defines the
+attributes present in the body. `Core2EnterpriseUserBase.ShouldSerializeEnterpriseExtension`
+now writes the member only once it holds something; a populated extension is unchanged, and the
+property stays non-null so the PATCH path still works.
+
 ### PATCH against your extension
 
 A PATCH path the core patcher cannot place is rejected with 400 `invalidPath`. It knows nothing
