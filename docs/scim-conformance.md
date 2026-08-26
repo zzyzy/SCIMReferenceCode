@@ -31,6 +31,7 @@ net48). See §5 item 3 for why.
 | Resource types | `scim/ResourceTypes` | `ResourceTypesController` |
 | Service provider config | `scim/ServiceProviderConfig` | `ServiceProviderConfigurationController` |
 | Bulk | `scim/Bulk` | `BulkRequestController` |
+| Search | `scim/.search`, `scim/Users/.search`, `scim/Groups/.search` | POST query, RFC 7644 §3.4.3 |
 
 `scim` comes from `SchemaConstants.PathInterface`; the resource segments come from
 `ProtocolConstants.PathUsers` / `PathGroups` / `PathBulk` and
@@ -481,7 +482,7 @@ test script at all. Its `Get Token` request targets Entra, not the sample's toke
 
 | 6 — the Microsoft Entra SCIM Validator against a tunnelled sample host | the payload shapes Entra ID actually sends, which is what no row here was written from | everything outside its 31 tests — and it can itself be wrong, see `entra-scim-validator.md` §5 |
 
-| 7 — `scim2-cli`'s `scim test` against a sample host | the RFC read as a checklist, and - uniquely - whether a response matches the schema this service advertises for itself | `/.search`, which it reports as absent because it is; and anything its own model does not express |
+| 7 — `scim2-cli`'s `scim test` against a sample host | the RFC read as a checklist, and - uniquely - whether a response matches the schema this service advertises for itself | anything its own model does not express |
 
 Oracle 5 is the one that runs on demand: `pnpm test` for net10.0 and `pnpm run test:net48` for
 net48, against sample hosts the harness starts itself. Oracles 1, 3, 6 and 7 remain manual. Read

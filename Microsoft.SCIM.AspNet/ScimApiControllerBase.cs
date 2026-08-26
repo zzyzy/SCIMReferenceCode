@@ -126,6 +126,21 @@ namespace Microsoft.SCIM
             return this.ExecuteAsync(() => this.handler.CreateAsync(this.Request, resource));
         }
 
+        /// <summary>
+        /// A query made with POST, per RFC 7644 section 3.4.3.
+        /// </summary>
+        /// <remarks>
+        /// A separate route from <see cref="Post(T)"/> rather than a branch inside it: the two
+        /// take different bodies, and letting the binder choose by shape would make a
+        /// malformed creation read as a search of everything.
+        /// </remarks>
+        [HttpPost]
+        [Route(ServiceConstants.PathSegmentSearch)]
+        public virtual Task<IHttpActionResult> Search([FromBody] SearchRequest search)
+        {
+            return this.ExecuteAsync(() => this.handler.SearchAsync(this.Request, search));
+        }
+
         [HttpPut]
         [Route(ScimApiResourceControllerBase<T>.AttributeValueIdentifier)]
         public virtual Task<IHttpActionResult> Put([FromBody] T resource, string identifier)

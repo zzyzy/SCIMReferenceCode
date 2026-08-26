@@ -11,5 +11,9 @@ namespace Microsoft.SCIM
         public const string Filter = "filter";
         public const string ExcludedAttributes = "excludedAttributes";
         public const string StartIndex = "startIndex";
+
+        /// <summary>RFC 7644 section 3.4.2.3. Read from a POST query body; see SearchRequest.</summary>
+        public const string SortBy = "sortBy";
+        public const string SortOrder = "sortOrder";
     }
 }

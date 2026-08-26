@@ -270,6 +270,76 @@ namespace Microsoft.SCIM
         }
 
         // Ported from ControllerTemplate<T>.Get().
+        /// <summary>
+        /// Answers a query made with POST to a "/.search" endpoint, per RFC 7644 section 3.4.3.
+        /// </summary>
+        /// <remarks>
+        /// The body carries the parameters section 3.4.2 defines for the query string, and the
+        /// response is "returned as specified in Section 3.4.2" - the same query, arriving
+        /// differently. So the body is rendered back into a query string and answered by
+        /// <see cref="QueryAsync"/>: one filter parser, one pagination path, one projection,
+        /// and no second implementation to drift from the first.
+        /// </remarks>
+        public virtual Task<ScimResult> SearchAsync(HttpRequestMessage request, SearchRequest search)
+        {
+            if (null == request)
+            {
+                throw new ArgumentNullException(nameof(request));
+            }
+
+            if (null == search)
+            {
+                return
+                    Task.FromResult(
+                        ScimResult.Error(
+                            HttpStatusCode.BadRequest,
+                            SystemForCrossDomainIdentityManagementProtocolResources.ExceptionInvalidRequest,
+                            ScimTypes.InvalidSyntax));
+            }
+
+            // RFC 7644 section 3.4.3: "Query requests MUST be identified using the following
+            // URI". A body that names something else is not a query request, and answering it
+            // as one would let a client's mistake read as a successful search of everything.
+            if (null == search.Schemas
+                || !search.Schemas.Any(
+                        (string item) =>
+                            string.Equals(
+                                item,
+                                ProtocolSchemaIdentifiers.Version2SearchRequest,
+                                StringComparison.OrdinalIgnoreCase)))
+            {
+                return
+                    Task.FromResult(
+                        ScimResult.Error(
+                            HttpStatusCode.BadRequest,
+                            SystemForCrossDomainIdentityManagementProtocolResources.ExceptionInvalidRequest,
+                            ScimTypes.InvalidSyntax));
+            }
+
+            UriBuilder address = new UriBuilder(request.RequestUri);
+
+            // The endpoint the query is against, without the ".search" that marked the POST as
+            // one. ResourceQuery reads only the query string, but the address is also what the
+            // response's own paging links and metadata locations are built from.
+            if (address.Path.EndsWith(ServiceConstants.PathSegmentSearch, StringComparison.OrdinalIgnoreCase))
+            {
+                address.Path =
+                    address.Path.Substring(0, address.Path.Length - ServiceConstants.PathSegmentSearch.Length)
+                        .TrimEnd('/');
+            }
+
+            address.Query = search.ToQueryString();
+
+            HttpRequestMessage query = new HttpRequestMessage(HttpMethod.Get, address.Uri);
+
+            foreach (KeyValuePair<string, IEnumerable<string>> header in request.Headers)
+            {
+                query.Headers.TryAddWithoutValidation(header.Key, header.Value);
+            }
+
+            return this.QueryAsync(query);
+        }
+
         public virtual async Task<ScimResult> QueryAsync(HttpRequestMessage request)
         {
             string correlationIdentifier = null;

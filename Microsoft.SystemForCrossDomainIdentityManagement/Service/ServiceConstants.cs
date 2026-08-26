@@ -4,6 +4,11 @@ namespace Microsoft.SCIM
 {
     public static class ServiceConstants
     {
+        /// <summary>
+        /// The suffix that marks a POST as a query rather than a creation - RFC 7644 3.4.3.
+        /// </summary>
+        public const string PathSegmentSearch = ".search";
+
         public const string PathSegmentResourceTypes = "ResourceTypes";
         public const string PathSegmentSchemas = "Schemas";
         public const string PathSegmentServiceProviderConfiguration = "ServiceProviderConfig";

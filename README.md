@@ -19,6 +19,7 @@ endpoints, error bodies and status codes.
 | `/ResourceTypes` | Which resource types this service serves |
 | `/ServiceProviderConfig` | Which SCIM features this service supports |
 | `/Bulk` | Batched operations |
+| `/.search` | Query with POST, on the root or a resource type |
 
 Two hosting legs, one library:
 

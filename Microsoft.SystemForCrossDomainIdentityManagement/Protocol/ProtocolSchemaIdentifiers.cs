@@ -16,12 +16,16 @@ namespace Microsoft.SCIM
         public const string PrefixMessages2 = ProtocolSchemaIdentifiers.PrefixMessages + ProtocolSchemaIdentifiers.VersionMessages2;
 
         private const string ResponseList = "ListResponse";
+        private const string RequestSearch = "SearchRequest";
         private const string RequestBulk = "BulkRequest";
 
         private const string ResponseBulk = "BulkResponse";
 
         public const string Version2Error =
             ProtocolSchemaIdentifiers.PrefixMessages2 + ProtocolSchemaIdentifiers.Error;
+
+        public const string Version2SearchRequest =
+            ProtocolSchemaIdentifiers.PrefixMessages2 + ProtocolSchemaIdentifiers.RequestSearch;
 
         public const string Version2ListResponse =
             ProtocolSchemaIdentifiers.PrefixMessages2 + ProtocolSchemaIdentifiers.ResponseList;

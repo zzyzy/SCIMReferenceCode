@@ -19,11 +19,11 @@ routed, and a schema that did not describe its own responses.
 
 | | Before | After |
 |---|---|---|
-| Checks passed | 66 | **106** |
-| Checks failed | 41 | **4** |
+| Checks passed | 66 | **110** |
+| Checks failed | 41 | **2** |
 
-Nine defects fixed. The four that remain are covered in §4; none is a parsing or protocol
-fault.
+Nine defects fixed and one absent feature built. The two that remain are covered in §4;
+neither is a parsing or protocol fault.
 
 | # | Root cause | Errors |
 |---|---|---|
@@ -36,6 +36,7 @@ fault.
 | D7 | The Group schema did not declare `$ref` or `display` on `members` | 3 |
 | D8 | `remove` of `active` was ignored | 1 |
 | D9 | An unknown URL under the service root was 501 | 1 |
+| D10 | `/.search` was not implemented — POST querying, RFC 7644 §3.4.3 | 2 |
 
 ---
 
@@ -159,6 +160,42 @@ Skipped outright, so a deactivation request reported success and left the user a
 `Active` is a non-nullable `bool`, so cleared is `false` — which is also what RFC 7643 §4.1.1
 makes an absent `active` mean.
 
+### D10 — `/.search`
+
+**Authority:** RFC 7644 §3.4.3, and §3.2's endpoint table, which names the base endpoint's
+POST query *"search from system"*.
+
+Not a defect but an absent feature: the endpoint answered 405. It now exists on `/Users`,
+`/Groups` and the service root, on both legs.
+
+The body is rendered back into the query string that would have carried the same query on a
+GET, and answered by the code that already serves GET. RFC 7644 §3.4.3 says a POST query is
+answered *"as specified in Section 3.4.2"* — it is the same query arriving differently — so a
+second parser would only be a second place for filter handling, attribute notation and paging
+to disagree with themselves. One test asserts the two produce identical bodies.
+
+`.search` is its own route rather than a branch inside `POST`, because the two take different
+bodies and letting the binder choose by shape would make a malformed creation read as a search
+of everything. A body not naming the SearchRequest URN is refused: §3.4.3 says query requests
+*MUST* be identified by it.
+
+The root search queries every resource type and concatenates, then pages once over the whole —
+paging each type separately returns the first page of each rather than the first page of the
+result set. Two details:
+
+- A type that cannot answer the filter contributes nothing rather than failing the search.
+  Groups have no `userName`, and there is no reading of "search everything" under which that
+  is an error rather than an empty match.
+- The type to query is read out of `/ResourceTypes`, trying the type's own schema and then the
+  extensions it declares. This provider dispatches `/Users` on `Core2EnterpriseUser`, whose
+  identifier is the *enterprise extension's* — not the core User schema the resource type
+  advertises — so assuming either one convention finds only half the service.
+
+**One trap worth naming:** `UriBuilder.Query` prepends a `?` of its own. A rendered query
+string that already carried one became `??attributes=…`, whose first key is `?attributes` —
+matching nothing, so the parameter was silently ignored while the filter still worked. The
+symptom was a search that returned the right resources unprojected.
+
 ### D9 — an unknown URL under the service root
 
 `GET /scim/<anything>` answered 501. RFC 7644 §3.12 gives 404 for *"specified resource or
@@ -172,7 +209,6 @@ for.
 
 | Check | Reason |
 |---|---|
-| `search_with_attributes` ×2 | `/.search` (RFC 7644 §3.4.3) is not implemented on either leg. An absent optional feature, not a defect — it answers 405. Building it means a new endpoint, `SearchRequest` binding and POST-body filter handling on both legs. |
 | `check_remove_attribute` — *"Attribute 'members' was not removed"* | `remove members` **does** clear the membership; the response carries `"members": []`. The tester wants the attribute absent. `ScimGroupMapper` deliberately always emits `members`, on the argument that an empty membership and an unreported one are different things a client cannot otherwise distinguish. A documented design decision, left alone. |
 | `check_remove_attribute` — *"Attribute 'active' was not removed"* | Cleared to `false` (D8). The tester wants it absent, which needs `Core2UserBase.Active` to become `bool?` — a breaking change to a public type, across every provider and mapper. Not worth it for one check. |
 
@@ -185,4 +221,4 @@ tester generates fresh identifiers each time and the in-memory store does not su
 restart, so counts compare across runs but individual values do not.
 
 The regression suites cover every fix above on both legs —
-`discovery-by-id.spec.ts` and `patch-whole-attribute.spec.ts`.
+`discovery-by-id.spec.ts`, `patch-whole-attribute.spec.ts` and `search.spec.ts`.
