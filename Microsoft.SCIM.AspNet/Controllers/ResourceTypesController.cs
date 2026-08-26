@@ -23,5 +23,21 @@ namespace Microsoft.SCIM
         {
             return this.Execute(() => this.handler.QueryResourceTypes(this.Request));
         }
+
+        /// <summary>
+        /// RFC 7644 section 4: one of them, retrieved the way a single User or Group is.
+        /// </summary>
+        /// <remarks>
+        /// A catch-all route parameter. A schema URI is
+        /// "urn:ietf:params:scim:schemas:core:2.0:User" - dots and colons throughout - and a
+        /// plain {identifier} segment stops at the first dot, so the URI arrived truncated and
+        /// matched nothing.
+        /// </remarks>
+        [HttpGet]
+        [Route("{*identifier}")]
+        public IHttpActionResult Get(string identifier)
+        {
+            return this.Execute(() => this.handler.RetrieveResourceType(this.Request, identifier));
+        }
     }
 }

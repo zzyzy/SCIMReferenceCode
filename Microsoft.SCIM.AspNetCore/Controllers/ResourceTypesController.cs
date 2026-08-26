@@ -24,5 +24,18 @@ namespace Microsoft.SCIM
         {
             return this.ToActionResult(this.handler.QueryResourceTypes(this.ConvertRequest()));
         }
+
+        /// <summary>
+        /// RFC 7644 section 4: one of them, retrieved the way a single User or Group is.
+        /// </summary>
+        /// <remarks>
+        /// A catch-all route parameter, for the reason the net48 leg gives: a schema URI is
+        /// all dots and colons, and a plain {identifier} segment stops at the first dot.
+        /// </remarks>
+        [HttpGet("{*identifier}")]
+        public IActionResult Get(string identifier)
+        {
+            return this.ToActionResult(this.handler.RetrieveResourceType(this.ConvertRequest(), identifier));
+        }
     }
 }

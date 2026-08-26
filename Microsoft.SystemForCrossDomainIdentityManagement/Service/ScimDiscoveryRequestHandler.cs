@@ -6,6 +6,7 @@ namespace Microsoft.SCIM
     using System.Collections.Generic;
     using System.Net;
     using System.Net.Http;
+    using System.Linq;
     using System.Threading.Tasks;
     using System.Web.Http;
     using Microsoft.Extensions.Logging;
@@ -116,6 +117,114 @@ namespace Microsoft.SCIM
                 // layer, where the host decided what to do with it - a plain-text stack trace
                 // under the developer exception page, an empty 500 without it, and something
                 // different again on the other hosting leg.
+                return ScimResult.Error(HttpStatusCode.InternalServerError, exception.Message);
+            }
+        }
+
+        /// <summary>
+        /// Retrieves one schema by its URI, per RFC 7644 section 4.
+        /// </summary>
+        /// <remarks>
+        /// "In cases where a request is for a specific ResourceType or Schema, the single JSON
+        /// object is returned in the same way that a single User or Group is retrieved" - so
+        /// the bare resource, not a ListResponse of one, and 404 when it is not among the
+        /// schemas the provider declares.
+        ///
+        /// Matched against the resource's own identifier, which for a schema is its URI.
+        /// </remarks>
+        public virtual ScimResult RetrieveSchema(HttpRequestMessage request, string identifier)
+        {
+            return
+                this.RetrieveDiscoveryResource(
+                    request,
+                    identifier,
+                    (IProvider provider) => provider.Schema,
+                    ScimEventIds.SchemasGetArgumentException,
+                    ScimEventIds.SchemasGetNotImplementedException,
+                    ScimEventIds.SchemasGetNotSupportedException,
+                    ScimEventIds.SchemasGetException);
+        }
+
+        /// <summary>
+        /// Retrieves one resource type by its identifier, per RFC 7644 section 4.
+        /// </summary>
+        public virtual ScimResult RetrieveResourceType(HttpRequestMessage request, string identifier)
+        {
+            return
+                this.RetrieveDiscoveryResource(
+                    request,
+                    identifier,
+                    (IProvider provider) => provider.ResourceTypes,
+                    ScimEventIds.ResourceTypesGetArgumentException,
+                    ScimEventIds.ResourceTypesGetNotImplementedException,
+                    ScimEventIds.ResourceTypesGetNotSupportedException,
+                    ScimEventIds.ResourceTypesGetException);
+        }
+
+        private ScimResult RetrieveDiscoveryResource(
+            HttpRequestMessage request,
+            string identifier,
+            Func<IProvider, IReadOnlyCollection<Resource>> select,
+            EventId argumentEvent,
+            EventId notImplementedEvent,
+            EventId notSupportedEvent,
+            EventId exceptionEvent)
+        {
+            string correlationIdentifier = null;
+
+            try
+            {
+                if (!request.TryGetRequestIdentifier(out correlationIdentifier))
+                {
+                    throw new HttpResponseException(HttpStatusCode.InternalServerError);
+                }
+
+                if (string.IsNullOrWhiteSpace(identifier))
+                {
+                    throw new HttpResponseException(HttpStatusCode.BadRequest);
+                }
+
+                IProvider provider = this.Provider;
+                if (null == provider)
+                {
+                    throw new HttpResponseException(HttpStatusCode.InternalServerError);
+                }
+
+                Resource result =
+                    select(provider)?
+                    .SingleOrDefault(
+                        (Resource item) =>
+                            string.Equals(item?.Identifier, identifier, StringComparison.OrdinalIgnoreCase));
+
+                if (null == result)
+                {
+                    throw new HttpResponseException(HttpStatusCode.NotFound);
+                }
+
+                return ScimResult.Ok(result);
+            }
+            catch (ArgumentException argumentException)
+            {
+                this.Logger.LogScimFailure(argumentEvent, argumentException, correlationIdentifier, request);
+                throw new HttpResponseException(HttpStatusCode.BadRequest);
+            }
+            catch (NotImplementedException notImplementedException)
+            {
+                this.Logger.LogScimFailure(notImplementedEvent, notImplementedException, correlationIdentifier, request);
+                throw new HttpResponseException(HttpStatusCode.NotImplemented);
+            }
+            catch (NotSupportedException notSupportedException)
+            {
+                this.Logger.LogScimFailure(notSupportedEvent, notSupportedException, correlationIdentifier, request);
+                throw new HttpResponseException(HttpStatusCode.NotImplemented);
+            }
+            catch (HttpResponseException)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                this.Logger.LogScimFailure(exceptionEvent, exception, correlationIdentifier, request);
                 return ScimResult.Error(HttpStatusCode.InternalServerError, exception.Message);
             }
         }
