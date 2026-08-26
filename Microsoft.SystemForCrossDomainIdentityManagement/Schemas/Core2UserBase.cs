@@ -25,8 +25,17 @@ namespace Microsoft.SCIM
             this.OnInitialization();
         }
 
-        [DataMember(Name = AttributeNames.Active)]
-        public virtual bool Active
+        /// <summary>
+        /// RFC 7643 section 4.1.1: the User's administrative status. Optional, and therefore
+        /// nullable.
+        /// </summary>
+        /// <remarks>
+        /// A plain bool could not express an absent "active" - false and unset were the same
+        /// value - so a remove of it (RFC 7644 section 3.5.2.2) had nothing to write, and a
+        /// resource that had never carried one reported itself inactive.
+        /// </remarks>
+        [DataMember(Name = AttributeNames.Active, IsRequired = false, EmitDefaultValue = false)]
+        public virtual bool? Active
         {
             get;
             set;

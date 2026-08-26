@@ -67,10 +67,13 @@ namespace Microsoft.SCIM.WebHostSample.Domain
 
         /// <summary>Maps a stored entity back to the SCIM resource a client reads.</summary>
         /// <remarks>
-        /// <c>members</c> is always present, even when empty, which is the opposite of the rule
-        /// the user's multi-valued attributes follow. A group with no members has a known and
-        /// empty membership; omitting the attribute would say instead that this response does
-        /// not report membership at all, and a client cannot tell the difference.
+        /// <c>members</c> is omitted when the group has none, which is the rule the user's
+        /// multi-valued attributes already follow. This once emitted an empty array instead, on
+        /// the argument that a known-empty membership and an unreported one are different
+        /// things - but RFC 7643 section 2.5 settles it the other way: "unassigned attributes,
+        /// the null value, or empty array ... SHALL be considered to be equivalent in 'state'".
+        /// There is no difference to report, and a remove of the attribute (RFC 7644 section
+        /// 3.5.2.2) can then be seen to have removed it.
         /// </remarks>
         public static Core2Group ToScim(GroupEntity entity)
         {
@@ -94,7 +97,9 @@ namespace Microsoft.SCIM.WebHostSample.Domain
                             Version = entity.Version,
                         },
                     Members =
-                        (entity.Members ?? new List<GroupMemberEntity>())
+                        ScimGroupMapper.Empty(entity.Members)
+                            ? null
+                            : entity.Members
                             .Where((GroupMemberEntity item) => null != item)
                             .Select(
                                 (GroupMemberEntity item) =>
@@ -115,6 +120,11 @@ namespace Microsoft.SCIM.WebHostSample.Domain
             }
 
             return resource;
+        }
+
+        private static bool Empty(IList<GroupMemberEntity> members)
+        {
+            return null == members || !members.Any((GroupMemberEntity item) => null != item);
         }
     }
 }

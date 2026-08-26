@@ -19,11 +19,10 @@ routed, and a schema that did not describe its own responses.
 
 | | Before | After |
 |---|---|---|
-| Checks passed | 66 | **110** |
-| Checks failed | 41 | **2** |
+| Checks passed | 66 | **112** |
+| Checks failed | 41 | **0** |
 
-Nine defects fixed and one absent feature built. The two that remain are covered in §4;
-neither is a parsing or protocol fault.
+Eleven defects fixed and one absent feature built.
 
 | # | Root cause | Errors |
 |---|---|---|
@@ -37,6 +36,8 @@ neither is a parsing or protocol fault.
 | D8 | `remove` of `active` was ignored | 1 |
 | D9 | An unknown URL under the service root was 501 | 1 |
 | D10 | `/.search` was not implemented — POST querying, RFC 7644 §3.4.3 | 2 |
+| D11 | `active` could not be absent, so it could not be removed | 1 |
+| D12 | An empty membership was reported as `[]`, so a removal could not be seen | 1 |
 
 ---
 
@@ -154,11 +155,24 @@ of sub-attributes.
 `$ref` and may carry `display`. RFC 7643 §4.2 defines all four. See §2.1 for why this matters
 more than it looks.
 
-### D8 — `remove` of `active`
+### D8, D11 — `remove` of `active`
 
 Skipped outright, so a deactivation request reported success and left the user active.
-`Active` is a non-nullable `bool`, so cleared is `false` — which is also what RFC 7643 §4.1.1
-makes an absent `active` mean.
+
+Honouring it needed the model to change as well. `Core2UserBase.Active` was a plain `bool`, in
+which false and unset are the same value, so there was nothing a remove could write. RFC 7643
+§4.1.1 makes `active` optional, so it is now `bool?` — absent when never set, absent after a
+remove, and `false` when a client actually says false. The sample's `UserEntity.IsActive`
+follows, since a store that cannot hold "absent" cannot round-trip it either.
+
+### D12 — an empty membership was reported as `[]`
+
+So a client could not see that `remove members` had removed anything. The mapper emitted the
+empty array deliberately, arguing that a known-empty membership and an unreported one are
+different things. RFC 7643 §2.5 settles it the other way: *"unassigned attributes, the null
+value, or empty array (in the case of a multi-valued attribute) SHALL be considered to be
+equivalent in 'state'"*. There is no difference to report, and omitting it is the rule the
+user's own multi-valued attributes already followed.
 
 ### D10 — `/.search`
 
@@ -205,12 +219,15 @@ for.
 
 ---
 
-## 4. What still fails, and why it is not fixed
+## 4. What still fails
 
-| Check | Reason |
-|---|---|
-| `check_remove_attribute` — *"Attribute 'members' was not removed"* | `remove members` **does** clear the membership; the response carries `"members": []`. The tester wants the attribute absent. `ScimGroupMapper` deliberately always emits `members`, on the argument that an empty membership and an unreported one are different things a client cannot otherwise distinguish. A documented design decision, left alone. |
-| `check_remove_attribute` — *"Attribute 'active' was not removed"* | Cleared to `false` (D8). The tester wants it absent, which needs `Core2UserBase.Active` to become `bool?` — a breaking change to a public type, across every provider and mapper. Not worth it for one check. |
+Nothing. The suite passes 112 of 112.
+
+Two of these were carried for a round as "not defects" before being fixed: `active` was read as
+a model limitation not worth a breaking change, and the empty `members` array as a deliberate
+design decision. Both readings were wrong in the same way — each treated a limitation of this
+implementation as though it were a property of SCIM, and neither had been checked against what
+the RFC actually says. §2.5 and §4.1.1 answer them outright.
 
 ---
 

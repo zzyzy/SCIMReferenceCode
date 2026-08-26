@@ -219,23 +219,32 @@ describe("A path naming a schema targets the extension it names", () => {
 });
 
 describe("Removing an attribute that is not a string", () => {
-  it("clears active", async () => {
-    // active is a non-nullable bool on the resource, so cleared is false - which is also what
-    // RFC 7643 4.1.1 makes an absent "active" mean. It used to be ignored outright.
+  it("removes active outright, rather than setting it false", async () => {
+    // RFC 7643 4.1.1 makes active optional, so a remove leaves it absent. It used to be
+    // ignored, and could not have been honoured anyway: the resource held a plain bool, in
+    // which false and unset are the same value.
     const created = await createUser({ active: true });
 
     await scim("PATCH", `/Users/${created.id}`, patchOp({ op: "remove", path: "active" }));
 
+    expect((await readUser(created.id)).active).toBeUndefined();
+  });
+
+  it("keeps active when it is set to false", async () => {
+    const created = await createUser({ active: false });
+
     expect((await readUser(created.id)).active).toBe(false);
   });
 
-  it("empties a group's membership", async () => {
+  it("removes a group's membership outright", async () => {
+    // RFC 7643 2.5: an unassigned attribute and an empty array are "equivalent in state", so
+    // there is nothing lost by omitting it - and a remove can be seen to have removed it.
     const member = await createUser();
     const created = await createGroup({ members: [{ value: member.id }] });
 
     await scim("PATCH", `/Groups/${created.id}`, patchOp({ op: "remove", path: "members" }));
 
-    expect((await scim("GET", `/Groups/${created.id}`)).body.members).toEqual([]);
+    expect((await scim("GET", `/Groups/${created.id}`)).body.members).toBeUndefined();
   });
 });
 

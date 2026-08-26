@@ -45,7 +45,8 @@ namespace Microsoft.SCIM.WebHostSample.Domain
 
         public string TimeZone { get; set; }
 
-        public bool IsActive { get; set; }
+        /// <summary>Nullable, because SCIM's "active" is optional and a remove clears it.</summary>
+        public bool? IsActive { get; set; }
 
         // The SCIM name object, flattened. A complex single-valued attribute is columns on the
         // owning row, not a table of its own - it has no independent lifetime.

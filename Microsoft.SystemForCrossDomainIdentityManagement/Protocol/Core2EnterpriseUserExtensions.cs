@@ -168,13 +168,12 @@ namespace Microsoft.SCIM
             switch (operation.Path.AttributePath)
             {
                 case AttributeNames.Active:
-                    // RFC 7644 section 3.5.2.2: a remove clears the attribute. Active is a
-                    // non-nullable bool, so cleared is false - which is also what RFC 7643
-                    // section 4.1.1 makes an absent "active" mean. Skipping remove outright
-                    // left the user active while answering success.
+                    // RFC 7644 section 3.5.2.2: a remove clears the attribute, and RFC 7643
+                    // section 4.1.1 makes active optional - so cleared is absent, not false.
+                    // Skipping remove outright left the user active while answering success.
                     if (OperationName.Remove == operation.Name)
                     {
-                        user.Active = false;
+                        user.Active = null;
                         break;
                     }
 
