@@ -133,9 +133,89 @@ namespace Microsoft.SCIM
         /// </remarks>
         internal static IEnumerable<PatchOperation2> Expand(PatchOperation2Combined operation)
         {
+            return ProtocolExtensions.Expand(operation, null);
+        }
+
+        /// <param name="schemas">
+        /// The schemas the target resource declares. A path naming one of them outright - not
+        /// an attribute within it - targets the extension as a whole, and its value is then a
+        /// set of that schema's attributes. Without the list there is no way to tell
+        /// "urn:...:User" (a schema) from "urn:...:User:manager" (an attribute of one), since
+        /// both are colon-separated and only the resource knows which names a schema.
+        /// </param>
+        internal static IEnumerable<PatchOperation2> Expand(
+            PatchOperation2Combined operation,
+            IReadOnlyCollection<string> schemas)
+        {
+            return ProtocolExtensions.Expand(operation, schemas, null);
+        }
+
+        /// <param name="complexAttributes">
+        /// Attributes that are complex but not multi-valued - "name" on a User. A path naming
+        /// one carries an object of its sub-attributes, which the sub-attribute patchers
+        /// cannot read: each wants a value path saying which one to write. Naming them is what
+        /// keeps a multi-valued attribute out of this - "members" also takes an object, but
+        /// there the object is one entry of the collection, not a set of sub-attributes.
+        /// </param>
+        internal static IEnumerable<PatchOperation2> Expand(
+            PatchOperation2Combined operation,
+            IReadOnlyCollection<string> schemas,
+            IReadOnlyCollection<string> complexAttributes)
+        {
             if (null == operation)
             {
                 return Enumerable.Empty<PatchOperation2>();
+            }
+
+            string expression = operation.Path?.ToString();
+
+            if (null != schemas
+                && !string.IsNullOrWhiteSpace(expression)
+                && schemas.Any(
+                    (string item) => string.Equals(item, expression, StringComparison.OrdinalIgnoreCase))
+                && (OperationName.Add == operation.Name || OperationName.Replace == operation.Name))
+            {
+                JObject members = ProtocolExtensions.ReadAttributes(operation.Value);
+
+                if (null == members)
+                {
+                    return Enumerable.Empty<PatchOperation2>();
+                }
+
+                List<PatchOperation2> expanded = new List<PatchOperation2>();
+                ProtocolExtensions.Expand(
+                    members,
+                    expression,
+                    operation.OperationName,
+                    ProtocolExtensions.MaximumExpansionDepth,
+                    expanded,
+                    true);
+                return expanded;
+            }
+
+            if (null != complexAttributes
+                && null != operation.Path
+                && null == operation.Path.ValuePath
+                && (null == operation.Path.SubAttributes || operation.Path.SubAttributes.Count < 1)
+                && (OperationName.Add == operation.Name || OperationName.Replace == operation.Name)
+                && complexAttributes.Any(
+                    (string item) =>
+                        string.Equals(item, operation.Path.AttributePath, StringComparison.OrdinalIgnoreCase)))
+            {
+                JObject members = ProtocolExtensions.ReadAttributes(operation.Value);
+
+                if (null != members)
+                {
+                    List<PatchOperation2> expanded = new List<PatchOperation2>();
+                    ProtocolExtensions.Expand(
+                        members,
+                        operation.Path.AttributePath,
+                        operation.OperationName,
+                        ProtocolExtensions.MaximumExpansionDepth,
+                        expanded,
+                        false);
+                    return expanded;
+                }
             }
 
             if (null != operation.Path && !string.IsNullOrWhiteSpace(operation.Path.AttributePath))
@@ -174,7 +254,7 @@ namespace Microsoft.SCIM
             }
 
             List<PatchOperation2> result = new List<PatchOperation2>();
-            ProtocolExtensions.Expand(attributes, null, operation.OperationName, ProtocolExtensions.MaximumExpansionDepth, result);
+            ProtocolExtensions.Expand(attributes, null, operation.OperationName, ProtocolExtensions.MaximumExpansionDepth, result, false);
             return result;
         }
 
@@ -195,12 +275,19 @@ namespace Microsoft.SCIM
             }
         }
 
+        /// <param name="underSchema">
+        /// Whether <paramref name="prefix"/> is a bare schema URN, whose members are attribute
+        /// paths of their own and take the schema separator. False once an attribute has been
+        /// appended: "urn:...:User" + "manager" is a path, but its sub-attribute is
+        /// "manager.value", not "manager:value".
+        /// </param>
         private static void Expand(
             JObject attributes,
             string prefix,
             string operationName,
             int depth,
-            IList<PatchOperation2> result)
+            IList<PatchOperation2> result,
+            bool underSchema)
         {
             foreach (JProperty attribute in attributes.Properties())
             {
@@ -209,11 +296,27 @@ namespace Microsoft.SCIM
                     continue;
                 }
 
-                string path = ProtocolExtensions.Qualify(prefix, attribute.Name);
+                // "schemas" belongs to the resource, not to any attribute of it - RFC 7643
+                // section 3. A client that serializes an extension whole sends it along with
+                // the extension's own attributes, and expanding it produced a path naming an
+                // attribute no schema defines.
+                if (string.Equals(attribute.Name, AttributeNames.Schemas, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                string path = ProtocolExtensions.Qualify(prefix, attribute.Name, underSchema);
 
                 if (depth > 1 && attribute.Value is JObject complex && complex.HasValues)
                 {
-                    ProtocolExtensions.Expand(complex, path, operationName, depth - 1, result);
+                    // A member that is itself a schema URN - which only happens at the top of a
+                    // path-less operation - opens a schema, and its own members take the schema
+                    // separator. Anything else opens a complex attribute.
+                    bool opensSchema =
+                        string.IsNullOrWhiteSpace(prefix)
+                        && attribute.Name.StartsWith(ProtocolExtensions.SchemaIdentifierPrefix, StringComparison.OrdinalIgnoreCase);
+
+                    ProtocolExtensions.Expand(complex, path, operationName, depth - 1, result, opensSchema);
                     continue;
                 }
 
@@ -233,7 +336,7 @@ namespace Microsoft.SCIM
         /// <summary>
         /// Names a member of <paramref name="prefix"/> the way a path names it.
         /// </summary>
-        private static string Qualify(string prefix, string name)
+        private static string Qualify(string prefix, string name, bool underSchema)
         {
             if (string.IsNullOrWhiteSpace(prefix))
             {
@@ -243,7 +346,7 @@ namespace Microsoft.SCIM
             // "urn:...:User" + "department" is one attribute path, not a sub-attribute of a
             // complex one, so it takes the schema separator rather than the period.
             return
-                prefix.StartsWith(ProtocolExtensions.SchemaIdentifierPrefix, StringComparison.OrdinalIgnoreCase)
+                underSchema
                     ? string.Concat(prefix, SchemaConstants.SeparatorSchemaIdentifierAttribute, name)
                     : string.Concat(prefix, ProtocolExtensions.SeparatorSubAttribute, name);
         }
@@ -267,7 +370,7 @@ namespace Microsoft.SCIM
 
             foreach (PatchOperation2Combined operation in patch.Operations)
             {
-                foreach (PatchOperation2 operationInternal in ProtocolExtensions.Expand(operation))
+                foreach (PatchOperation2 operationInternal in ProtocolExtensions.Expand(operation, group.Schemas))
                 {
                     group.Apply(operationInternal);
                 }
@@ -1576,10 +1679,16 @@ namespace Microsoft.SCIM
                     continue;
                 }
 
+                // The whole entry, not just its value. RFC 7643 section 2.4 gives a role
+                // display, type and primary as well, and rebuilding it from value alone
+                // discarded whatever else the client sent while still reporting success.
                 current.Add(
                     new Role()
                     {
-                        Value = value.Value
+                        Value = value.Value,
+                        Display = value.Display,
+                        ItemType = value.TypeName,
+                        Primary = value.Primary ?? false
                     });
             }
 

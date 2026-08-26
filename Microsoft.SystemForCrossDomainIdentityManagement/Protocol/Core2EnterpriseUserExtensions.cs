@@ -12,6 +12,9 @@ namespace Microsoft.SCIM
 
     public static class Core2EnterpriseUserExtensions
     {
+        /// <summary>The User's complex, single-valued attributes. See ProtocolExtensions.Expand.</summary>
+        private static readonly string[] ComplexAttributes = new[] { AttributeNames.Name };
+
         public static void Apply(this Core2EnterpriseUser user, PatchRequest2Base<PatchOperation2> patch)
         {
             if (null == user)
@@ -54,11 +57,67 @@ namespace Microsoft.SCIM
 
             foreach (PatchOperation2Combined operation in patch.Operations)
             {
-                foreach (PatchOperation2 operationInternal in ProtocolExtensions.Expand(operation))
+                // A remove naming a schema clears the extension whole. It is answered here
+                // rather than through an expanded path because there is no attribute to name:
+                // the operation is about the extension itself.
+                if (user.TryRemoveExtension(operation))
+                {
+                    continue;
+                }
+
+                foreach (PatchOperation2 operationInternal in
+                    ProtocolExtensions.Expand(operation, user.Schemas, Core2EnterpriseUserExtensions.ComplexAttributes))
                 {
                     user.Apply(operationInternal);
                 }
             }
+        }
+
+        /// <summary>
+        /// Answers a remove whose path names one of the resource's schemas.
+        /// </summary>
+        /// <remarks>
+        /// RFC 7644 section 3.5.2.2: the target is removed. Here the target is an extension,
+        /// so removing it means clearing every attribute it holds. Path.TryParse splits a bare
+        /// schema URN at its last colon - "urn:...:2.0" plus "User" - so an operation like this
+        /// could never be routed by path alone, and was answered 400 invalidPath.
+        /// </remarks>
+        private static bool TryRemoveExtension(this Core2EnterpriseUser user, PatchOperation2Combined operation)
+        {
+            if (null == operation || OperationName.Remove != operation.Name)
+            {
+                return false;
+            }
+
+            string expression = operation.Path?.ToString();
+
+            if (string.IsNullOrWhiteSpace(expression)
+                || null == user.Schemas
+                || !user.Schemas.Any(
+                        (string item) => string.Equals(item, expression, StringComparison.OrdinalIgnoreCase)))
+            {
+                return false;
+            }
+
+            // The core schema is the resource, not an extension of it.
+            if (string.Equals(expression, SchemaIdentifiers.Core2User, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (string.Equals(expression, SchemaIdentifiers.Core2EnterpriseUser, StringComparison.OrdinalIgnoreCase))
+            {
+                user.EnterpriseExtension = new ExtensionAttributeEnterpriseUser2();
+                return true;
+            }
+
+            if (user.CustomExtension.TryGetValue(expression, out IDictionary<string, object> extension))
+            {
+                extension.Clear();
+                return true;
+            }
+
+            return true;
         }
 
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Maintainability", "CA1502:AvoidExcessiveComplexity", Justification = "None")]
@@ -109,17 +168,31 @@ namespace Microsoft.SCIM
             switch (operation.Path.AttributePath)
             {
                 case AttributeNames.Active:
-                    if (operation.Name != OperationName.Remove)
+                    // RFC 7644 section 3.5.2.2: a remove clears the attribute. Active is a
+                    // non-nullable bool, so cleared is false - which is also what RFC 7643
+                    // section 4.1.1 makes an absent "active" mean. Skipping remove outright
+                    // left the user active while answering success.
+                    if (OperationName.Remove == operation.Name)
                     {
-                        value = operation.Value.SingleOrDefault();
-                        if (value != null && !string.IsNullOrWhiteSpace(value.Value) && bool.TryParse(value.Value, out bool active))
-                        {
-                            user.Active = active;
-                        }
+                        user.Active = false;
+                        break;
+                    }
+
+                    value = operation.Value.SingleOrDefault();
+                    if (value != null && !string.IsNullOrWhiteSpace(value.Value) && bool.TryParse(value.Value, out bool active))
+                    {
+                        user.Active = active;
                     }
                     break;
 
                 case AttributeNames.Addresses:
+                    if (null == operation.Path.ValuePath)
+                    {
+                        user.Addresses =
+                            Core2EnterpriseUserExtensions.PatchAddressCollection(user.Addresses, operation);
+                        break;
+                    }
+
                     user.PatchAddresses(operation);
                     break;
 
@@ -155,7 +228,11 @@ namespace Microsoft.SCIM
                     // emails answered 204 and left the old addresses in place.
                     if (null == operation.Path.ValuePath)
                     {
-                        Core2EnterpriseUserExtensions.PatchElectronicMailAddressCollection(user, operation);
+                        user.ElectronicMailAddresses =
+                            Core2EnterpriseUserExtensions.PatchValueCollection(
+                                user.ElectronicMailAddresses,
+                                operation,
+                                () => new ElectronicMailAddress());
                         break;
                     }
 
@@ -163,6 +240,16 @@ namespace Microsoft.SCIM
                     break;
 
                 case AttributeNames.Ims:
+                    if (null == operation.Path.ValuePath)
+                    {
+                        user.InstantMessagings =
+                            Core2EnterpriseUserExtensions.PatchValueCollection(
+                                user.InstantMessagings,
+                                operation,
+                                () => new InstantMessaging());
+                        break;
+                    }
+
                     user.PatchInstantMessagings(operation);
                     break;
 
@@ -192,10 +279,30 @@ namespace Microsoft.SCIM
                     break;
 
                 case AttributeNames.Name:
+                    // A remove naming the attribute itself clears it. The sub-attribute
+                    // patcher declines an operation with no value path - it needs one to know
+                    // which part of the name to touch - so "remove name" answered success and
+                    // left the name in place.
+                    if (OperationName.Remove == operation.Name && null == operation.Path.ValuePath)
+                    {
+                        user.Name = null;
+                        break;
+                    }
+
                     user.PatchName(operation);
                     break;
 
                 case AttributeNames.PhoneNumbers:
+                    if (null == operation.Path.ValuePath)
+                    {
+                        user.PhoneNumbers =
+                            Core2EnterpriseUserExtensions.PatchValueCollection(
+                                user.PhoneNumbers,
+                                operation,
+                                () => new PhoneNumber());
+                        break;
+                    }
+
                     user.PatchPhoneNumbers(operation);
                     break;
 
@@ -833,69 +940,144 @@ namespace Microsoft.SCIM
         /// it, and remove with no value clears it. The same three cases the group members
         /// patcher already answers.
         /// </remarks>
-        private static void PatchElectronicMailAddressCollection(
-            Core2EnterpriseUser user,
+        /// <summary>
+        /// Applies an operation naming a multi-valued attribute as a whole, rather than one
+        /// entry of it.
+        /// </summary>
+        /// <remarks>
+        /// Generic over <see cref="TypedValue"/> because emails, phone numbers and instant
+        /// messagings differ only in their type: each is a value, a type and a primary flag.
+        /// Written once so the three cannot drift - which they had, emails being the only one
+        /// that answered a whole-collection operation at all while the other two reported
+        /// success and changed nothing.
+        ///
+        /// The whole entry is carried across, not just its value. RFC 7643 section 2.4 gives
+        /// every multi-valued attribute a type and a primary as well.
+        /// </remarks>
+        /// <summary>
+        /// The addresses counterpart of <see cref="PatchValueCollection{T}"/>.
+        /// </summary>
+        /// <remarks>
+        /// Separate because an address has no "value": entries are told apart by their type,
+        /// and every sub-attribute has to be carried across by name.
+        /// </remarks>
+        private static IEnumerable<Address> PatchAddressCollection(
+            IEnumerable<Address> current,
             PatchOperation2 operation)
         {
             if (OperationName.Remove == operation.Name
                 && (null == operation.Value || !operation.Value.Any()))
             {
-                user.ElectronicMailAddresses = null;
-                return;
+                return null;
             }
 
             if (null == operation.Value || !operation.Value.Any())
             {
-                return;
+                return current;
             }
 
-            ElectronicMailAddress[] supplied =
+            Address[] supplied =
                 operation
                 .Value
-                .Where(
-                    (OperationValue item) =>
-                        !string.IsNullOrWhiteSpace(item.Value))
                 .Select(
                     (OperationValue item) =>
-                        new ElectronicMailAddress()
+                        new Address()
                         {
-                            Value = item.Value
+                            ItemType = item.TypeName,
+                            Primary = item.Primary ?? false,
+                            Formatted = item.Formatted,
+                            StreetAddress = item.StreetAddress,
+                            Locality = item.Locality,
+                            Region = item.Region,
+                            PostalCode = item.PostalCode,
+                            Country = item.Country
                         })
                 .ToArray();
 
             switch (operation.Name)
             {
                 case OperationName.Replace:
-                    user.ElectronicMailAddresses = supplied;
-                    break;
+                    return supplied;
 
                 case OperationName.Add:
-                    user.ElectronicMailAddresses =
-                        null == user.ElectronicMailAddresses
-                            ? supplied
-                            : user.ElectronicMailAddresses.Concat(supplied).ToArray();
-                    break;
+                    return null == current ? supplied : current.Concat(supplied).ToArray();
 
                 case OperationName.Remove:
-                    if (null == user.ElectronicMailAddresses)
+                    if (null == current)
                     {
-                        break;
+                        return null;
                     }
 
-                    user.ElectronicMailAddresses =
-                        user
-                        .ElectronicMailAddresses
+                    return
+                        current
                         .Where(
-                            (ElectronicMailAddress item) =>
+                            (Address item) =>
                                 !supplied.Any(
-                                    (ElectronicMailAddress removed) =>
-                                        string.Equals(
-                                            removed.Value,
-                                            item.Value,
-                                            StringComparison.OrdinalIgnoreCase)))
+                                    (Address removed) =>
+                                        string.Equals(removed.ItemType, item.ItemType, StringComparison.OrdinalIgnoreCase)))
                         .ToArray();
-                    break;
             }
+
+            return current;
+        }
+
+        private static IEnumerable<T> PatchValueCollection<T>(
+            IEnumerable<T> current,
+            PatchOperation2 operation,
+            Func<T> create)
+            where T : TypedValue
+        {
+            if (OperationName.Remove == operation.Name
+                && (null == operation.Value || !operation.Value.Any()))
+            {
+                return null;
+            }
+
+            if (null == operation.Value || !operation.Value.Any())
+            {
+                return current;
+            }
+
+            T[] supplied =
+                operation
+                .Value
+                .Where((OperationValue item) => !string.IsNullOrWhiteSpace(item.Value))
+                .Select(
+                    (OperationValue item) =>
+                    {
+                        T entry = create();
+                        entry.Value = item.Value;
+                        entry.ItemType = item.TypeName;
+                        entry.Primary = item.Primary ?? false;
+                        return entry;
+                    })
+                .ToArray();
+
+            switch (operation.Name)
+            {
+                case OperationName.Replace:
+                    return supplied;
+
+                case OperationName.Add:
+                    return null == current ? supplied : current.Concat(supplied).ToArray();
+
+                case OperationName.Remove:
+                    if (null == current)
+                    {
+                        return null;
+                    }
+
+                    return
+                        current
+                        .Where(
+                            (T item) =>
+                                !supplied.Any(
+                                    (T removed) =>
+                                        string.Equals(removed.Value, item.Value, StringComparison.OrdinalIgnoreCase)))
+                        .ToArray();
+            }
+
+            return current;
         }
 
         private static bool Matches(string candidate, string attributeName)
