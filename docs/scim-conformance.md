@@ -481,9 +481,17 @@ test script at all. Its `Get Token` request targets Entra, not the sample's toke
 
 | 6 — the Microsoft Entra SCIM Validator against a tunnelled sample host | the payload shapes Entra ID actually sends, which is what no row here was written from | everything outside its 31 tests — and it can itself be wrong, see `entra-scim-validator.md` §5 |
 
+| 7 — `scim2-cli`'s `scim test` against a sample host | the RFC read as a checklist, and - uniquely - whether a response matches the schema this service advertises for itself | `/.search`, which it reports as absent because it is; and anything its own model does not express |
+
 Oracle 5 is the one that runs on demand: `pnpm test` for net10.0 and `pnpm run test:net48` for
-net48, against sample hosts the harness starts itself. Oracles 1, 3 and 6 remain manual. Read
+net48, against sample hosts the harness starts itself. Oracles 1, 3, 6 and 7 remain manual. Read
 them together, not individually.
+
+Oracles 6 and 7 are the two written by third parties, and they disagree usefully: 6 sends what
+one large client happens to send, 7 walks the RFC. Oracle 7 is also the only one that validates
+a response against `/Schemas` - against what this service says about itself - so it catches a
+schema that has drifted from the bodies it describes, which nothing else here does. Its result
+of record is in [`scim2-cli-conformance.md`](scim2-cli-conformance.md).
 
 Oracle 6 is the only one written by a third party. It found five defects that oracles 1–5 had
 all missed, because it sends operation shapes nobody here had thought to write down — most
