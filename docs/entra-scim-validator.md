@@ -32,6 +32,13 @@ on. `Supports Verbose PATCH (Preview)` is the one that changes what is sent:
 | 3 | default (Deactivation, Delete ×2 on) | 22 / 24 | 7 / 7 | the two in §5 |
 | 4 | default, repeat | 22 / 24 | 7 / 7 | the two in §5 |
 | 5 | **all five on** — adds Verbose PATCH and Run Tests Sequentially | 22 / 24 | 7 / 7 | the two in §5 |
+| 6 | all five on, after the `scim2-cli` work | 22 / 24 | 7 / 7 | the two in §5 |
+
+Run 6 is a regression check rather than a new reading. The twelve defects
+[`scim2-cli-conformance.md`](scim2-cli-conformance.md) records were fixed between runs 5 and
+6, two of them changing what a response carries: `active` is now absent unless set, and an
+empty `members` is omitted. Neither moved this suite — the validator always sends `active`
+explicitly, and its group cases name membership by filter rather than by its emptiness.
 
 Run 5 substitutes `Patch User - Replace Attributes **Verbose Request**` for the ordinary
 `Patch User - Replace Attributes`; the test count stays 31. Verbose mode gives **every**
