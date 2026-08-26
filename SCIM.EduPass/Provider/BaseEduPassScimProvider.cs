@@ -375,7 +375,7 @@ namespace Scim.EduPass
 
                         user.Metadata.Created = replacedUser.Metadata.Created;
                         user.Metadata.LastModified = DateTime.UtcNow;
-                        await store.ReplaceUserAsync(user).ConfigureAwait(false);
+                        await store.ReplaceUserAsync(user, EduPassWrite.Replace).ConfigureAwait(false);
 
                         replacement = await BaseEduPassScimProvider.ProjectAsync(store, user).ConfigureAwait(false);
                         break;
@@ -396,7 +396,7 @@ namespace Scim.EduPass
 
                         group.Metadata.Created = replacedGroup.Metadata.Created;
                         group.Metadata.LastModified = DateTime.UtcNow;
-                        await store.ReplaceGroupAsync(group).ConfigureAwait(false);
+                        await store.ReplaceGroupAsync(group, EduPassWrite.Replace).ConfigureAwait(false);
 
                         replacement = group;
                         break;
@@ -445,7 +445,7 @@ namespace Scim.EduPass
 
                     patchedUser.Metadata.Created = user.Metadata.Created;
                     patchedUser.Metadata.LastModified = DateTime.UtcNow;
-                    await store.ReplaceUserAsync(patchedUser).ConfigureAwait(false);
+                    await store.ReplaceUserAsync(patchedUser, EduPassWrite.Patch(request)).ConfigureAwait(false);
                 }
                 else
                 {
@@ -466,7 +466,7 @@ namespace Scim.EduPass
 
                     patchedGroup.Metadata.Created = group.Metadata.Created;
                     patchedGroup.Metadata.LastModified = DateTime.UtcNow;
-                    await store.ReplaceGroupAsync(patchedGroup).ConfigureAwait(false);
+                    await store.ReplaceGroupAsync(patchedGroup, EduPassWrite.Patch(request)).ConfigureAwait(false);
                 }
 
                 await store.CompleteAsync().ConfigureAwait(false);

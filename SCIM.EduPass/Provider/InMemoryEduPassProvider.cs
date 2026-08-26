@@ -102,7 +102,10 @@ namespace Scim.EduPass
                 return Task.FromResult(0);
             }
 
-            public Task ReplaceUserAsync(EduPassUser user)
+            // The write context is ignored here, and only here: replacing a dictionary entry
+            // stores every attribute whatever the verb asked for. A store that audits or
+            // updates columns selectively is the reason it is passed.
+            public Task ReplaceUserAsync(EduPassUser user, EduPassWrite write)
             {
                 this.pending.Add(() => this.users[user.Identifier] = user);
 
@@ -148,7 +151,7 @@ namespace Scim.EduPass
                 return Task.FromResult(0);
             }
 
-            public Task ReplaceGroupAsync(Core2Group group)
+            public Task ReplaceGroupAsync(Core2Group group, EduPassWrite write)
             {
                 this.pending.Add(() => this.groups[group.Identifier] = group);
 

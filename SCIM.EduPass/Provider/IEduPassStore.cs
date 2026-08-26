@@ -22,6 +22,11 @@ namespace Scim.EduPass
     /// <c>userName</c> and <c>displayName</c> carry is enforced by the provider on the read,
     /// but a database should also hold a unique constraint on both: two concurrent creates can
     /// pass the read before either writes.
+    ///
+    /// A replace carries an <see cref="EduPassWrite"/> saying whether it serves a PUT or a
+    /// PATCH, and in the PATCH case which operations were asked for. Both verbs write a whole
+    /// resource, so a store that persists every attribute can ignore it; one that audits,
+    /// publishes changes, or updates only the columns named has no other way to know.
     /// </remarks>
     public interface IEduPassStore : IDisposable
     {
@@ -35,7 +40,8 @@ namespace Scim.EduPass
 
         Task AddUserAsync(EduPassUser user);
 
-        Task ReplaceUserAsync(EduPassUser user);
+        /// <param name="write">The request being served. See <see cref="EduPassWrite"/>.</param>
+        Task ReplaceUserAsync(EduPassUser user, EduPassWrite write);
 
         /// <returns><c>false</c> if no user has that identifier.</returns>
         Task<bool> RemoveUserAsync(string identifier);
@@ -48,7 +54,8 @@ namespace Scim.EduPass
 
         Task AddGroupAsync(Core2Group group);
 
-        Task ReplaceGroupAsync(Core2Group group);
+        /// <param name="write">The request being served. See <see cref="EduPassWrite"/>.</param>
+        Task ReplaceGroupAsync(Core2Group group, EduPassWrite write);
 
         /// <returns><c>false</c> if no group has that identifier.</returns>
         Task<bool> RemoveGroupAsync(string identifier);
