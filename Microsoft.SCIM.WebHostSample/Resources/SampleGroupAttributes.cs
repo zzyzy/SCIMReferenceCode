@@ -28,7 +28,9 @@ namespace Microsoft.SCIM.WebHostSample.Resources
                     Description = SampleConstants.DescriptionMemebers
                 };
                 membersScheme.AddSubAttribute(SampleMultivaluedAttributes.ValueSubAttributeScheme);
+                membersScheme.AddSubAttribute(SampleMultivaluedAttributes.ReferenceSubAttributeScheme);
                 membersScheme.AddSubAttribute(SampleMultivaluedAttributes.TypeSubAttributeScheme);
+                membersScheme.AddSubAttribute(SampleMultivaluedAttributes.DisplaySubAttributeScheme);
 
                 return membersScheme;
             }

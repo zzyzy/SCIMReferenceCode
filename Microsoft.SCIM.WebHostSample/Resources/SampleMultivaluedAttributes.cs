@@ -32,6 +32,33 @@ namespace Microsoft.SCIM.WebHostSample.Resources
             }
         }
 
+        /// <summary>
+        /// The <c>$ref</c> sub-attribute of a multi-valued attribute's entry.
+        /// </summary>
+        /// <remarks>
+        /// RFC 7643 section 4.2 gives members value, $ref, type and display. The service
+        /// returns $ref on every membership - the hosting layer fills in a local URI - and a
+        /// schema that does not declare it says the response carries an attribute the resource
+        /// does not have. A client validating a response against the advertised schema, which
+        /// is what /Schemas is for, rejects it.
+        /// </remarks>
+        public static AttributeScheme ReferenceSubAttributeScheme
+        {
+            get
+            {
+                AttributeScheme referenceScheme =
+                    new AttributeScheme(AttributeNames.Reference, AttributeDataType.reference, false)
+                    {
+                        Description = SampleConstants.DescriptionReference,
+                        Mutability = Mutability.immutable
+                    };
+                referenceScheme.AddReferenceTypes(Types.User);
+                referenceScheme.AddReferenceTypes(Types.Group);
+
+                return referenceScheme;
+            }
+        }
+
         public static AttributeScheme DisplaySubAttributeScheme
         {
             get

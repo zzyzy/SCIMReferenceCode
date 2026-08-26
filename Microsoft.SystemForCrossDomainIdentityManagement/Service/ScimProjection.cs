@@ -159,6 +159,12 @@ namespace Microsoft.SCIM
                 }
             }
 
+            // Gathered before anything is pruned, because a root can be named by more than one
+            // path: attributes=emails.value&attributes=emails.type asks for both, and pruning
+            // once per path in turn left only whichever came last.
+            IDictionary<string, HashSet<string>> subAttributes =
+                new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+
             foreach (string path in requestedAttributePaths)
             {
                 if (string.IsNullOrWhiteSpace(path))
@@ -166,25 +172,67 @@ namespace Microsoft.SCIM
                     continue;
                 }
 
-                string root = ScimProjection.RootSegment(path);
-                if (string.Equals(root, path.Trim(), StringComparison.OrdinalIgnoreCase))
+                string trimmed = path.Trim();
+                string root = ScimProjection.RootSegment(trimmed);
+
+                // The attribute named whole. Everything under it stays, whatever else asked
+                // for one of its sub-attributes.
+                if (string.Equals(root, trimmed, StringComparison.OrdinalIgnoreCase))
+                {
+                    subAttributes[root] = null;
+                    continue;
+                }
+
+                if (subAttributes.TryGetValue(root, out HashSet<string> requested) && null == requested)
                 {
                     continue;
                 }
 
-                string remainder = path.Trim().Substring(root.Length + 1);
-
-                if (resource.Property(root, StringComparison.OrdinalIgnoreCase)?.Value is JObject complex)
+                if (null == requested)
                 {
-                    string retainSub = ScimProjection.RootSegment(remainder);
+                    requested = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    subAttributes[root] = requested;
+                }
 
-                    foreach (JProperty property in complex.Properties().ToArray())
+                requested.Add(ScimProjection.RootSegment(trimmed.Substring(root.Length + 1)));
+            }
+
+            foreach (KeyValuePair<string, HashSet<string>> entry in subAttributes)
+            {
+                if (null == entry.Value)
+                {
+                    continue;
+                }
+
+                JToken value = resource.Property(entry.Key, StringComparison.OrdinalIgnoreCase)?.Value;
+
+                // Both shapes, not just the complex one. A multi-valued attribute is an array
+                // of complex values, so attributes=members.value has to reach into each entry -
+                // without this it returned every sub-attribute the entry had, $ref included.
+                if (value is JObject complex)
+                {
+                    ScimProjection.RetainSubAttributes(complex, entry.Value);
+                }
+                else if (value is JArray multiValued)
+                {
+                    foreach (JToken item in multiValued)
                     {
-                        if (!string.Equals(property.Name, retainSub, StringComparison.OrdinalIgnoreCase))
+                        if (item is JObject element)
                         {
-                            property.Remove();
+                            ScimProjection.RetainSubAttributes(element, entry.Value);
                         }
                     }
+                }
+            }
+        }
+
+        private static void RetainSubAttributes(JObject complex, ICollection<string> retain)
+        {
+            foreach (JProperty property in complex.Properties().ToArray())
+            {
+                if (!retain.Contains(property.Name))
+                {
+                    property.Remove();
                 }
             }
         }

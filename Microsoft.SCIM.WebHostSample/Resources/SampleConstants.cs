@@ -55,6 +55,8 @@ namespace Microsoft.SCIM.WebHostSample.Resources
         public const string DescriptionGivenName = "The given name of the User, or" +
             " first name in most Western languages(e.g., 'Barbara' given the full name 'Ms. Barbara J Jensen, III').";
         public const string DescriptionDisplay = "A human-readable name, primarily used for display purposes.READ-ONLY.";
+
+        public const string DescriptionReference = "The URI corresponding to a SCIM resource that is a member of this Group.";
         public const string DescriptionPrimary = "A Boolean value indicating the 'primary' " + " or preferred attribute value for this attribute, " +
             "The primary attribute value 'true' MUST appear no more than once.";
         public const string DescriptionStreetAddress = "The full street address component, which may include house number, street name, P.O.box, and multi-line" +
