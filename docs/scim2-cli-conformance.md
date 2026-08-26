@@ -4,7 +4,8 @@
 [`scim2-cli`](https://scim2-cli.readthedocs.io/en/latest/tutorial.html#perform-a-scim-compliance-test)
 (`scim test`), which drives the [`scim2-tester`](https://scim2-tester.readthedocs.io) suite.
 **Run date:** 2026-08-26.
-**Subject:** `Microsoft.SCIM.WebHostSample.Net48` over the default `InMemoryProvider`.
+**Subject:** `Microsoft.SCIM.WebHostSample.Net48` over the default `InMemoryProvider`, and —
+see §6 — over the SQLite-backed `DatabaseProvider`.
 **Authority:** RFC 7644 (protocol), RFC 7643 (core schema).
 
 Oracle 7 in [`scim-conformance.md`](scim-conformance.md) §7, and the second third-party one
@@ -234,8 +235,56 @@ the RFC actually says. §2.5 and §4.1.1 answer them outright.
 ## 5. Re-running
 
 Build, start the host in API-key mode, then run the command in §2. Results are per-run: the
-tester generates fresh identifiers each time and the in-memory store does not survive a
-restart, so counts compare across runs but individual values do not.
+tester generates fresh identifiers each time, so counts compare across runs but individual
+values do not. Whether anything survives a restart depends on the provider — see §6.
 
 The regression suites cover every fix above on both legs —
 `discovery-by-id.spec.ts`, `patch-whole-attribute.spec.ts` and `search.spec.ts`.
+
+---
+
+## 6. The same suite against the SQLite provider
+
+**Run date:** 2026-08-26. **Subject:** the same `net48` host started with
+`SCIM_PROVIDER=database`, so the two resource types are served out of SQLite through Dapper
+rather than out of a dictionary.
+
+| Provider | Passed | Failed |
+|---|---|---|
+| `InMemoryProvider` (the §1 baseline, re-run) | 112 | 0 |
+| `DatabaseProvider` (SQLite) | **112** | **0** |
+
+No defects, and nothing to fix. The point of running it was that the two providers are meant
+to differ only in where the rows live: the domain entities, the mappers and every rule about
+uniqueness, replacement and patching are shared, and the oracle that walks the RFC agreeing
+across both is what makes that claim checkable rather than merely asserted.
+
+The host log carries no exception for either run. That matters more than the count, because a
+store can answer a check correctly while failing underneath it — the tester reads status codes
+and bodies, not logs.
+
+### 6.1 What a persistent store makes newly testable
+
+The in-memory provider forgets everything on restart, so two things could not previously be
+asked of this oracle:
+
+- **A second run against a store the first one dirtied.** Re-running without deleting the
+  database also passes 112 of 112. Worth checking rather than assuming: this service refuses a
+  duplicate `userName` with 409 and a duplicate `displayName` likewise, so a tester that reused
+  a fixed name would have passed on an empty store and failed on a populated one. It generates
+  fresh identifiers, and does not.
+- **That the run leaves nothing behind.** After two full runs every table is empty — including
+  the five child tables of a user and the group membership join table, none of which the tester
+  ever addresses directly. They are emptied by `ON DELETE CASCADE` when it deletes the resource
+  that owns them, which is the only evidence here that the cascade is wired correctly, and the
+  kind of thing an in-memory dictionary cannot get wrong in the first place.
+
+### 6.2 Re-running this leg
+
+```bash
+SCIM_PROVIDER=database SCIM_API_KEY=<key> \
+  Microsoft.SCIM.WebHostSample.Net48.exe http://localhost:5000
+```
+
+then the command in §2. `SCIM_DATABASE` sets where the file goes; unset, it is `scim.db` beside
+the executable. Delete it to start from empty — but as above, a run does not require it.
