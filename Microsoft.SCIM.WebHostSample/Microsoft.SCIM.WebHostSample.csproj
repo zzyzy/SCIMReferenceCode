@@ -11,6 +11,23 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!--
+      The database-backed sample provider (SCIM_PROVIDER=database). Dapper rather than an ORM
+      because Domain already maps a row to an entity by hand; SQLite because it needs no server
+      and runs on both sample legs.
+    -->
+    <PackageReference Include="Dapper" Version="2.1.66" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.0" />
+    <!--
+      Pinned, not incidental: Microsoft.Data.Sqlite 10.0.0 resolves SQLitePCLRaw 2.1.11
+      transitively, whose bundled SQLite carries GHSA-2m69-gcr7-jv3q. 3.0.0 is the lowest
+      version restore accepts without that warning; 3.0.4 pulls a native package that refuses
+      an Any CPU build, which is what both net48 samples are.
+    -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Microsoft.SCIM.AspNetCore\Microsoft.SCIM.AspNetCore.csproj" />
     <!-- Selected at startup by SCIM_PROVIDER=edupass; see Program.cs. -->
     <ProjectReference Include="..\SCIM.EduPass\SCIM.EduPass.csproj" />

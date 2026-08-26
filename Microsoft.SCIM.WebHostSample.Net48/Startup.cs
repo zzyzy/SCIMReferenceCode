@@ -17,6 +17,7 @@ namespace Microsoft.SCIM.WebHostSample
     using Microsoft.Owin.Security.Jwt;
     using Microsoft.Owin.Security.OAuth;
     using Microsoft.SCIM.WebHostSample.Provider;
+    using Microsoft.SCIM.WebHostSample.Provider.Database;
     using Scim.EduPass;
     // global:: because this file's namespace starts with Microsoft, so a plain 'using Owin'
     // binds to Microsoft.Owin rather than to the root Owin namespace that IAppBuilder lives in.
@@ -72,6 +73,9 @@ namespace Microsoft.SCIM.WebHostSample
             bool faulty =
                 string.Equals(configuration["SCIM_PROVIDER"], "faulty", StringComparison.OrdinalIgnoreCase);
 
+            bool database =
+                string.Equals(configuration["SCIM_PROVIDER"], "database", StringComparison.OrdinalIgnoreCase);
+
             bool requireUinFin =
                 string.Equals(configuration["SCIM_EDUPASS_REQUIRE_UINFIN"], "1", StringComparison.Ordinal)
                 || string.Equals(configuration["SCIM_EDUPASS_REQUIRE_UINFIN"], "true", StringComparison.OrdinalIgnoreCase);
@@ -88,6 +92,13 @@ namespace Microsoft.SCIM.WebHostSample
             else if (faulty)
             {
                 provider = new FaultyProvider();
+            }
+            else if (database)
+            {
+                // The same two resource types as the default provider, over SQLite instead of
+                // a dictionary. SCIM_DATABASE overrides where the file goes; see
+                // ScimDatabase.Resolve.
+                provider = new DatabaseProvider(ScimDatabase.Resolve(configuration["SCIM_DATABASE"]));
             }
             else
             {

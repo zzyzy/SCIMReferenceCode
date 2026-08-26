@@ -23,6 +23,15 @@
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <OutputPath>bin\</OutputPath>
 
+    <!--
+      x64 rather than Any CPU, for the same reason as Microsoft.SCIM.WebHostSample.Net48: the
+      SQLite the database provider uses ships a native library per architecture, and an Any CPU
+      build copies one with nothing to say which. This project is also the application folder,
+      so that copy is what IIS loads - which means the application pool has to be 64-bit, as it
+      is by default. A 32-bit pool needs this set to x86 instead.
+    -->
+    <PlatformTarget>x64</PlatformTarget>
+
     <!-- Global.asax is application markup, not content to compile or copy. -->
     <EnableDefaultNoneItems>false</EnableDefaultNoneItems>
   </PropertyGroup>
@@ -54,6 +63,23 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!--
+      The database-backed sample provider (SCIM_PROVIDER=database). Dapper rather than an ORM
+      because Domain already maps a row to an entity by hand; SQLite because it needs no server
+      and runs on both sample legs.
+    -->
+    <PackageReference Include="Dapper" Version="2.1.66" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.0" />
+    <!--
+      Pinned, not incidental: Microsoft.Data.Sqlite 10.0.0 resolves SQLitePCLRaw 2.1.11
+      transitively, whose bundled SQLite carries GHSA-2m69-gcr7-jv3q. 3.0.0 is the lowest
+      version restore accepts without that warning; 3.0.4 pulls a native package that refuses
+      an Any CPU build, which is what both net48 samples are.
+    -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Microsoft.SCIM.AspNet\Microsoft.SCIM.AspNet.csproj" />
   </ItemGroup>
 
@@ -68,5 +94,20 @@
     <Compile Include="..\Microsoft.SCIM.WebHostSample\Resources\**\*.cs" Link="Resources\%(Filename)%(Extension)" />
     <None Include="..\Microsoft.SCIM.WebHostSample\appsettings*.json" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <!--
+    Flattens the SQLite native library into the application's bin folder.
+
+    An executable project gets this from the SDK, but a library one leaves the native in a
+    runtimes/(rid)/native/ folder - and .NET Framework's DllImport probes the application base,
+    not that folder, so the first connection fails with a DllNotFoundException. This project is
+    the application folder, so the copy has to happen here rather than downstream of it.
+  -->
+  <Target Name="CopyNativeSqliteToOutput" AfterTargets="Build">
+    <ItemGroup>
+      <NativeSqlite Include="$(OutputPath)runtimes/win-$(PlatformTarget)/native/e_sqlite3.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(NativeSqlite)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
+  </Target>
 
 </Project>

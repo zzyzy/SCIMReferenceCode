@@ -19,6 +19,7 @@ namespace Microsoft.SCIM.WebHostSample
     using Microsoft.Extensions.Hosting;
     using Microsoft.IdentityModel.Tokens;
     using Microsoft.SCIM.WebHostSample.Provider;
+    using Microsoft.SCIM.WebHostSample.Provider.Database;
     using Scim.EduPass;
 
     public class Program
@@ -141,6 +142,15 @@ namespace Microsoft.SCIM.WebHostSample
             else if (Program.Selected(provider, "faulty"))
             {
                 builder.Services.AddScim(new FaultyProvider(), pathPrefix);
+            }
+            else if (Program.Selected(provider, "database"))
+            {
+                // The same two resource types as the default provider, over SQLite instead of
+                // a dictionary. SCIM_DATABASE overrides where the file goes; see
+                // ScimDatabase.Resolve.
+                builder.Services.AddScim(
+                    new DatabaseProvider(ScimDatabase.Resolve(configuration["SCIM_DATABASE"])),
+                    pathPrefix);
             }
             else
             {

@@ -18,6 +18,7 @@ namespace Microsoft.SCIM.WebHostSample.IIS
     using Microsoft.Owin.Security.Jwt;
     using Microsoft.Owin.Security.OAuth;
     using Microsoft.SCIM.WebHostSample.Provider;
+    using Microsoft.SCIM.WebHostSample.Provider.Database;
     // global:: because this file's namespace starts with Microsoft, so a plain 'using Owin'
     // binds to Microsoft.Owin rather than to the root Owin namespace that IAppBuilder lives in.
     using global::Owin;
@@ -69,7 +70,18 @@ namespace Microsoft.SCIM.WebHostSample.IIS
             bool isDevelopment =
                 string.Equals(environmentName, ScimStartup.EnvironmentNameDevelopment, StringComparison.OrdinalIgnoreCase);
 
-            IProvider provider = new InMemoryProvider();
+            // SCIM_PROVIDER=database serves the same two resource types over SQLite instead
+            // of a dictionary, which is the shape an application hosted under IIS is likelier
+            // to want: the other two samples restart with an empty store, and a worker process
+            // that recycles would too. SCIM_DATABASE overrides where the file goes; see
+            // ScimDatabase.Resolve for what the application pool needs write access to.
+            bool database =
+                string.Equals(configuration["SCIM_PROVIDER"], "database", StringComparison.OrdinalIgnoreCase);
+
+            IProvider provider =
+                database
+                    ? (IProvider)new DatabaseProvider(ScimDatabase.Resolve(configuration["SCIM_DATABASE"]))
+                    : new InMemoryProvider();
 
             ServiceCollection services = new ServiceCollection();
             services.AddSingleton(typeof(IProvider), provider);
