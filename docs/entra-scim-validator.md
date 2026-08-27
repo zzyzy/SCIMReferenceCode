@@ -388,6 +388,27 @@ playwright-cli -s=chrome goto https://scimvalidator.microsoft.com/
 playwright-cli -s=chrome snapshot --depth=25
 ```
 
+The first attach raises the extension's connection dialog and a tab picker. To skip both on
+later runs, set the extension's auth token in the environment — the CLI forwards it as
+`?token=` on the connect URL, and the extension connects straight through when it matches:
+
+```powershell
+$env:PLAYWRIGHT_MCP_EXTENSION_TOKEN = "<token>"
+```
+
+The token is shown in the **Auth Token** section of that dialog. It is a credential for your
+whole browser, not for this repository: the dialog's own warning is that allowing the
+connection *"exposes the entire browser to the client, including any signed-in sessions,
+cookies, and content in other tabs and windows"*. Keep it in your environment and out of
+version control. To revoke, regenerate it in the dialog **and restart the browser** —
+regenerating alone does not drop a live connection.
+
+Tabs reachable by the client are the ones in Chrome's **Playwright** tab group, which the
+extension creates and which you can drag further tabs into. It is worth keeping between runs,
+since it is what spares you the tab picker: `detach` leaves it alone, and only closing its
+last tab destroys it. Never `close` an attached session and never `delete-data` against one —
+both act on the browser you attached to, which here is your own daily Chrome profile.
+
 Refs (`e70`, `e95`, …) are assigned per snapshot and change as the page changes. Re-snapshot
 after every navigation rather than reusing a ref across steps; `playwright-cli find "<text>"`
 re-locates one element without paying for a whole snapshot.
