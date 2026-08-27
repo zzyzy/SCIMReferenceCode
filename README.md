@@ -369,6 +369,7 @@ reach.
 | [`docs/scim-conformance.md`](docs/scim-conformance.md) | The RFC-derived spec both legs are verified against |
 | [`docs/entra-scim-validator.md`](docs/entra-scim-validator.md) | Running the Entra SCIM Validator against the sample: result, method, and the defects it found |
 | [`docs/scim2-cli-conformance.md`](docs/scim2-cli-conformance.md) | The `scim2-cli` compliance run: result, method, and the nine defects it found |
+| [`docs/scim-sanity-conformance.md`](docs/scim-sanity-conformance.md) | The `scim-sanity probe` run: result, method, and what a PATCH answers on each leg |
 | [`tests/integration/README.md`](tests/integration/README.md) | The test suite and its five hosts |
 
 ## 6. Changes from the Microsoft reference code

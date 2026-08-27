@@ -130,6 +130,11 @@ namespace Microsoft.SCIM.WebHostSample
             string provider = configuration["SCIM_PROVIDER"];
             string pathPrefix = configuration["SCIM_PATH_PREFIX"];
 
+            // RFC 7644 section 3.5.2 permits 200-with-resource or 204 on PATCH. The sample
+            // answers 200, so a group PATCH reads like a user PATCH; the Edupass leg keeps
+            // 204, which its interface spec requires.
+            ScimServiceOptions.GroupPatchReturnsResource = !Program.Selected(provider, "edupass");
+
             if (Program.Selected(provider, "edupass"))
             {
                 bool requireUinFin = Program.Enabled(configuration["SCIM_EDUPASS_REQUIRE_UINFIN"]);

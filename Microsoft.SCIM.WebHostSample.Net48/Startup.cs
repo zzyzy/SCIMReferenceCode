@@ -131,6 +131,11 @@ namespace Microsoft.SCIM.WebHostSample
 
             Startup.ConfigureAuthentication(app, configuration, isDevelopment);
 
+            // RFC 7644 section 3.5.2 permits 200-with-resource or 204 on PATCH. The sample
+            // answers 200, so a group PATCH reads like a user PATCH; the Edupass leg keeps
+            // 204, which its interface spec requires.
+            ScimServiceOptions.GroupPatchReturnsResource = !eduPass;
+
             HttpConfiguration httpConfiguration = new HttpConfiguration();
             string pathPrefix = configuration["SCIM_PATH_PREFIX"];
 

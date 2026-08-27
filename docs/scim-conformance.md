@@ -484,20 +484,29 @@ test script at all. Its `Get Token` request targets Entra, not the sample's toke
 
 | 7 — `scim2-cli`'s `scim test` against a sample host | the RFC read as a checklist, and - uniquely - whether a response matches the schema this service advertises for itself | anything its own model does not express |
 
-Oracle 5 is the one that runs on demand: `pnpm test` for net10.0 and `pnpm run test:net48` for
-net48, against sample hosts the harness starts itself. Oracles 1, 3, 6 and 7 remain manual. Read
-them together, not individually.
+| 8 — `scim-sanity probe` against a sample host | a CRUD lifecycle over real HTTP, and - uniquely - the status code a PATCH answers with rather than the resource read back afterwards | anything outside its seven phases; it is also stricter than RFC 7644 §3.5.2 on that status, see `scim-sanity-conformance.md` §2.1 |
 
-Oracles 6 and 7 are the two written by third parties, and they disagree usefully: 6 sends what
-one large client happens to send, 7 walks the RFC. Oracle 7 is also the only one that validates
-a response against `/Schemas` - against what this service says about itself - so it catches a
+Oracle 5 is the one that runs on demand: `pnpm test` for net10.0 and `pnpm run test:net48` for
+net48, against sample hosts the harness starts itself. Oracles 1, 3, 6, 7 and 8 remain manual.
+Read them together, not individually.
+
+Oracles 6, 7 and 8 are the three written by third parties, and they disagree usefully: 6 sends
+what one large client happens to send, 7 walks the RFC, 8 walks a CRUD lifecycle and asserts the
+responses rather than the state left behind. Oracle 7 is also the only one that validates a
+response against `/Schemas` - against what this service says about itself - so it catches a
 schema that has drifted from the bodies it describes, which nothing else here does. Its result
 of record is in [`scim2-cli-conformance.md`](scim2-cli-conformance.md).
 
-Oracle 6 is the only one written by a third party. It found five defects that oracles 1–5 had
+Oracle 6 was the first written by a third party. It found five defects that oracles 1–5 had
 all missed, because it sends operation shapes nobody here had thought to write down — most
 importantly a PATCH `add`/`replace` carrying no `path`. Its result of record, the method, and
 the defects are in [`entra-scim-validator.md`](entra-scim-validator.md).
+
+Oracle 8 asserts what a PATCH *answers*, where oracles 1–7 assert what it *did* — every PATCH
+suite in `tests/integration` accepts either 200 or 204 on purpose. That is the whole of what it
+found, and none of the other seven could have. Its result of record is in
+[`scim-sanity-conformance.md`](scim-sanity-conformance.md); note §2.1, where it is stricter
+than RFC 7644 §3.5.2 allows.
 
 ### Status of oracle 1 as of the port
 

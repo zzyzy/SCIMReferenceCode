@@ -644,7 +644,10 @@ namespace Microsoft.SCIM
                 IProviderAdapter<T> provider = this.AdaptProvider();
                 await provider.Update(request, identifier, patchRequest, correlationIdentifier).ConfigureAwait(false);
 
-                if (provider.ReturnsResourceOnPatch)
+                // RFC 7644 section 3.5.2 leaves 200-with-resource or 204 to the service,
+                // except that a request naming the attributes it wants back MUST be answered
+                // with 200 - a projection is the one thing 204 cannot carry.
+                if (provider.ReturnsResourceOnPatch || ScimRequestHandler<T>.RequestsProjection(request))
                 {
                     return await this.RetrieveAsync(request, identifier).ConfigureAwait(false);
                 }
@@ -717,6 +720,28 @@ namespace Microsoft.SCIM
                 // different again on the other hosting leg.
                 return ScimResult.Error(HttpStatusCode.InternalServerError, exception.Message);
             }
+        }
+
+        /// <summary>
+        /// Whether the request names the attributes it wants back, per RFC 7644 section 3.9.
+        /// </summary>
+        private static bool RequestsProjection(HttpRequestMessage request)
+        {
+            string query = request?.RequestUri?.Query;
+
+            if (string.IsNullOrWhiteSpace(query))
+            {
+                return false;
+            }
+
+            return query
+                .TrimStart('?')
+                .Split('&')
+                .Select((string pair) => pair.Split('=')[0])
+                .Any(
+                    (string key) =>
+                        string.Equals(key, QueryKeys.Attributes, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(key, QueryKeys.ExcludedAttributes, StringComparison.OrdinalIgnoreCase));
         }
 
         // Ported from ControllerTemplate<T>.Post.

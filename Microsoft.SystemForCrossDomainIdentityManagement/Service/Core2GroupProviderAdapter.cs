@@ -16,5 +16,11 @@ namespace Microsoft.SCIM
                 return SchemaIdentifiers.Core2Group;
             }
         }
+
+        /// <inheritdoc/>
+        public override bool ReturnsResourceOnPatch
+        {
+            get { return ScimServiceOptions.GroupPatchReturnsResource; }
+        }
     }
 }
