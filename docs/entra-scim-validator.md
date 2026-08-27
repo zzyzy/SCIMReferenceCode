@@ -33,6 +33,22 @@ on. `Supports Verbose PATCH (Preview)` is the one that changes what is sent:
 | 4 | default, repeat | 22 / 24 | 7 / 7 | the two in §5 |
 | 5 | **all five on** — adds Verbose PATCH and Run Tests Sequentially | 22 / 24 | 7 / 7 | the two in §5 |
 | 6 | all five on, after the `scim2-cli` work | 22 / 24 | 7 / 7 | the two in §5 |
+| 7 | all five on, after the PATCH response-code work | 22 / 24 | 7 / 7 | the two in §5 |
+
+Run 7 (2026-08-27) is likewise a regression check, for the PATCH response-code work in
+[`scim-sanity-conformance.md`](scim-sanity-conformance.md). It is the run where the change is
+most visible in the traffic and least visible in the result: the six group PATCHes this suite
+sends answered 204 in run 6 and **200 with the resource** in run 7, and the score did not move.
+That is the finding. This validator asserts the *body* of a group PATCH response only when
+there is one, so a body appearing where none had been is new surface it had never inspected —
+and it accepted it. Read together with `scim-sanity`, which fails a 204 outright, and
+`scim2-cli`, which accepts either: the sample host now sits in all three oracles'
+intersection.
+
+The ngrok inspector retains captures across sessions, which is worth knowing before reading
+it: run 7's log showed six group PATCHes at 204 and six at 200 until the timestamps were
+checked, and the 204s were run 6's, from the previous day. Sort by time before concluding
+anything from that pane.
 
 Run 6 is a regression check rather than a new reading. The twelve defects
 [`scim2-cli-conformance.md`](scim2-cli-conformance.md) records were fixed between runs 5 and

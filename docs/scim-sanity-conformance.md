@@ -157,6 +157,22 @@ not claim (§1).
 
 ---
 
+## 5.1 Checked against the other two oracles
+
+Both re-run after the change, on the same net48 host:
+
+| Oracle | Result | Reading |
+|---|---|---|
+| 7 — `scim2-cli` | 112 / 112, unchanged | Validates responses against the schema the service advertises for itself, so the new group PATCH body is surface it had never inspected. It validates |
+| 6 — Entra SCIM Validator, run 7 | 22 / 24 core, 7 / 7 preview, unchanged | Its six group PATCHes answered 204 before and 200 with the resource now; the score did not move. The two failures are the validator defect in [`entra-scim-validator.md`](entra-scim-validator.md) §5 |
+
+The three oracles disagree about 204 and all three now pass: `scim-sanity` accepts only 200,
+`scim2-cli` and the Entra validator accept either. The sample host moved into the
+intersection rather than trading one oracle's pass for another's failure — which is the only
+reason a change made to satisfy an over-strict oracle (§2.1) is safe to make at all.
+
+---
+
 ## 6. Regression cover
 
 `tests/integration/suites/patch-response-code.spec.ts`, on both legs. It pins all three
