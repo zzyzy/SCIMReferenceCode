@@ -8,7 +8,7 @@
 see §6 — over the SQLite-backed `DatabaseProvider`.
 **Authority:** RFC 7644 (protocol), RFC 7643 (core schema).
 
-Oracle 7 in [`scim-conformance.md`](scim-conformance.md) §7, and the second third-party one
+Oracle 7 in [`scim-conformance.md`](../scim-conformance.md) §7, and the second third-party one
 after the Entra validator. The two disagree usefully: Entra sends what one large client
 happens to send, while scim2-tester walks the RFC. Where Entra found four defects in how
 PATCH is *parsed*, this found defects in what the service *offers* — endpoints that were never
@@ -53,7 +53,7 @@ uvx --from scim2-cli scim \
 
 `uvx scim2-cli` does not work: the package's executables are `scim` and `scim2`, so
 `--from` is required. The host was run in API-key mode (`SCIM_API_KEY=<key>`), which needs no
-token minting — see [`entra-scim-validator.md`](entra-scim-validator.md) §2.1.
+token minting — see [`scimvalidator-microsoft.md`](scimvalidator-microsoft.md) §2.1.
 
 **Redirecting the output to a file hangs the run.** `scim test ... > out.txt` never returns;
 `scim test ... | tee out.txt` is fine. Pipe, don't redirect.
@@ -225,7 +225,7 @@ for.
 Nothing. The suite passes 112 of 112.
 
 Re-run on 2026-08-27 after the PATCH response-code work in
-[`scim-sanity-conformance.md`](scim-sanity-conformance.md): still 112 of 112, no failures,
+[`scim-sanity-tests.md`](scim-sanity-tests.md): still 112 of 112, no failures,
 errors or skips. That run is the one worth having, because a group PATCH now returns a body
 where it previously returned none — and this is the oracle that validates a response against
 the schema the service advertises for itself (§2.1), so it had never inspected that body

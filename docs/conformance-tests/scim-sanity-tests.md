@@ -6,7 +6,7 @@
 **Subject:** `Microsoft.SCIM.WebHostSample.Net48` over the default `InMemoryProvider`.
 **Authority:** RFC 7644 (protocol), RFC 7643 (core schema).
 
-Oracle 8 in [`scim-conformance.md`](scim-conformance.md) §7, and the third written by a third
+Oracle 8 in [`scim-conformance.md`](../scim-conformance.md) §7, and the third written by a third
 party. It walks a seven-phase CRUD lifecycle over real HTTP rather than reading the RFC as a
 checklist, and it is the only oracle here that asserts the **status code of a PATCH** rather
 than the resource as read back afterwards — which is exactly the gap it found. Every PATCH
@@ -48,7 +48,7 @@ uvx scim-sanity probe http://localhost:5000/scim \
 ```
 
 `uvx scim-sanity` works directly — the package's console script matches its name, unlike
-`scim2-cli` (see [`scim2-cli-conformance.md`](scim2-cli-conformance.md) §2). Add
+`scim2-cli` (see [`scim2-cli-tests.md`](scim2-cli-tests.md) §2). Add
 `--json-output` for a machine-readable result; that form is what §1's counts were read from.
 
 `--i-accept-side-effects` is mandatory and not a formality: the probe creates, mutates and
@@ -56,7 +56,7 @@ deletes real users and groups on the target. Point it at a sample host, never at
 holding real identities.
 
 The host was run in API-key mode, which needs no token minting — see
-[`entra-scim-validator.md`](entra-scim-validator.md) §2.1:
+[`scimvalidator-microsoft.md`](scimvalidator-microsoft.md) §2.1:
 
 ```bash
 SCIM_API_KEY=<key> \
@@ -95,7 +95,7 @@ which meant preserving the accident. `Core2EnterpriseUserProviderAdapter` overro
 `Core2GroupProviderAdapter` is the only group adapter in the repository, and the Edupass leg
 uses it too. The EduPass/FIMS interface specification requires 204 for Update Group
 Membership — *"Status 204: PATCH applied"* — and
-[`edupass-spec-validation-2026-08-26.md`](edupass-spec-validation-2026-08-26.md) §6 records
+[`edupass-spec-validation-2026-08-26.md`](../edupass-spec-validation-2026-08-26.md) §6 records
 that 204 as conformance. Flipping the default globally would have satisfied this oracle by
 breaking a downstream contract, and would have made that document wrong.
 
@@ -145,7 +145,7 @@ projection two ways and get a body only one of them.
 **One trap worth naming**, and the reason the key is read off the raw query string rather
 than through `UriBuilder`: `UriBuilder.Query` prepends a `?` of its own, so a query that
 already carried one becomes `??attributes=…`, whose first key is `?attributes` — matching
-nothing. `scim2-cli-conformance.md` §3 records the same trap costing a silently unprojected
+nothing. `scim2-cli-tests.md` §3 records the same trap costing a silently unprojected
 search.
 
 ---
@@ -164,7 +164,7 @@ Both re-run after the change, on the same net48 host:
 | Oracle | Result | Reading |
 |---|---|---|
 | 7 — `scim2-cli` | 112 / 112, unchanged | Validates responses against the schema the service advertises for itself, so the new group PATCH body is surface it had never inspected. It validates |
-| 6 — Entra SCIM Validator, run 7 | 22 / 24 core, 7 / 7 preview, unchanged | Its six group PATCHes answered 204 before and 200 with the resource now; the score did not move. The two failures are the validator defect in [`entra-scim-validator.md`](entra-scim-validator.md) §5 |
+| 6 — Entra SCIM Validator, run 7 | 22 / 24 core, 7 / 7 preview, unchanged | Its six group PATCHes answered 204 before and 200 with the resource now; the score did not move. The two failures are the validator defect in [`scimvalidator-microsoft.md`](scimvalidator-microsoft.md) §5 |
 
 The three oracles disagree about 204 and all three now pass: `scim-sanity` accepts only 200,
 `scim2-cli` and the Entra validator accept either. The sample host moved into the

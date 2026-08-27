@@ -7,7 +7,7 @@
 `InMemoryProvider`, exposed through an ngrok tunnel.
 **Authority:** RFC 7644 (protocol), RFC 7643 (core schema).
 
-This is oracle 6 alongside the five in [`scim-conformance.md`](scim-conformance.md) §7. It is
+This is oracle 6 alongside the five in [`scim-conformance.md`](../scim-conformance.md) §7. It is
 the only one written by a third party, which is its whole value: it exercises the endpoint the
 way Entra ID's provisioning service does, including payload shapes no test in this repository
 had thought to send. It is also the only oracle that can be wrong about us — see §5.
@@ -36,7 +36,7 @@ on. `Supports Verbose PATCH (Preview)` is the one that changes what is sent:
 | 7 | all five on, after the PATCH response-code work | 22 / 24 | 7 / 7 | the two in §5 |
 
 Run 7 (2026-08-27) is likewise a regression check, for the PATCH response-code work in
-[`scim-sanity-conformance.md`](scim-sanity-conformance.md). It is the run where the change is
+[`scim-sanity-tests.md`](scim-sanity-tests.md). It is the run where the change is
 most visible in the traffic and least visible in the result: the six group PATCHes this suite
 sends answered 204 in run 6 and **200 with the resource** in run 7, and the score did not move.
 That is the finding. This validator asserts the *body* of a group PATCH response only when
@@ -49,7 +49,7 @@ Reading that traffic has a trap in it — the ngrok inspector retains captures a
 so run 7's pane appeared to show the change misfiring. See §7.2.
 
 Run 6 is a regression check rather than a new reading. The twelve defects
-[`scim2-cli-conformance.md`](scim2-cli-conformance.md) records were fixed between runs 5 and
+[`scim2-cli-tests.md`](scim2-cli-tests.md) records were fixed between runs 5 and
 6, two of them changing what a response carries: `active` is now absent unless set, and an
 empty `members` is omitted. Neither moved this suite — the validator always sends `active`
 explicitly, and its group cases name membership by filter rather than by its emptiness.
@@ -115,7 +115,7 @@ The validator is a hosted service, so it must reach the endpoint over the public
    changes how an attribute is asserted, not which tests run.
 
 The tunnel is HTTPS-terminated, so the host's lack of TLS does not matter here. It does matter
-everywhere else — see [`net48-hosting.md`](net48-hosting.md).
+everywhere else — see [`net48-hosting.md`](../net48-hosting.md).
 
 ### 2.2 Reading what actually happened
 
@@ -326,7 +326,7 @@ provisioning.
   verdict; confirm it against the captured traffic and the RFC before changing anything.
 - **Everything outside its 31 tests.** No bulk, no pagination, no `attributes` /
   `excludedAttributes` projection, no ETag concurrency, no authentication negatives.
-  [`scim-conformance.md`](scim-conformance.md) remains the specification; this is one reading
+  [`scim-conformance.md`](../scim-conformance.md) remains the specification; this is one reading
   against it.
 
 ---

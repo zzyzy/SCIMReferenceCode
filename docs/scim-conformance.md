@@ -480,11 +480,11 @@ test script at all. Its `Get Token` request targets Entra, not the sample's toke
 
 | 5 — `tests/integration`, run per leg | the rows above that can be observed over HTTP, plus the Edupass conformance suite | anything needing a live Edupass endpoint, and the FIMS-internal half of the test plan |
 
-| 6 — the Microsoft Entra SCIM Validator against a tunnelled sample host | the payload shapes Entra ID actually sends, which is what no row here was written from | everything outside its 31 tests — and it can itself be wrong, see `entra-scim-validator.md` §5 |
+| 6 — the Microsoft Entra SCIM Validator against a tunnelled sample host | the payload shapes Entra ID actually sends, which is what no row here was written from | everything outside its 31 tests — and it can itself be wrong, see `conformance-tests/scimvalidator-microsoft.md` §5 |
 
 | 7 — `scim2-cli`'s `scim test` against a sample host | the RFC read as a checklist, and - uniquely - whether a response matches the schema this service advertises for itself | anything its own model does not express |
 
-| 8 — `scim-sanity probe` against a sample host | a CRUD lifecycle over real HTTP, and - uniquely - the status code a PATCH answers with rather than the resource read back afterwards | anything outside its seven phases; it is also stricter than RFC 7644 §3.5.2 on that status, see `scim-sanity-conformance.md` §2.1 |
+| 8 — `scim-sanity probe` against a sample host | a CRUD lifecycle over real HTTP, and - uniquely - the status code a PATCH answers with rather than the resource read back afterwards | anything outside its seven phases; it is also stricter than RFC 7644 §3.5.2 on that status, see `conformance-tests/scim-sanity-tests.md` §2.1 |
 
 Oracle 5 is the one that runs on demand: `pnpm test` for net10.0 and `pnpm run test:net48` for
 net48, against sample hosts the harness starts itself. Oracles 1, 3, 6, 7 and 8 remain manual.
@@ -495,17 +495,17 @@ what one large client happens to send, 7 walks the RFC, 8 walks a CRUD lifecycle
 responses rather than the state left behind. Oracle 7 is also the only one that validates a
 response against `/Schemas` - against what this service says about itself - so it catches a
 schema that has drifted from the bodies it describes, which nothing else here does. Its result
-of record is in [`scim2-cli-conformance.md`](scim2-cli-conformance.md).
+of record is in [`conformance-tests/scim2-cli-tests.md`](conformance-tests/scim2-cli-tests.md).
 
 Oracle 6 was the first written by a third party. It found five defects that oracles 1–5 had
 all missed, because it sends operation shapes nobody here had thought to write down — most
 importantly a PATCH `add`/`replace` carrying no `path`. Its result of record, the method, and
-the defects are in [`entra-scim-validator.md`](entra-scim-validator.md).
+the defects are in [`conformance-tests/scimvalidator-microsoft.md`](conformance-tests/scimvalidator-microsoft.md).
 
 Oracle 8 asserts what a PATCH *answers*, where oracles 1–7 assert what it *did* — every PATCH
 suite in `tests/integration` accepts either 200 or 204 on purpose. That is the whole of what it
 found, and none of the other seven could have. Its result of record is in
-[`scim-sanity-conformance.md`](scim-sanity-conformance.md); note §2.1, where it is stricter
+[`conformance-tests/scim-sanity-tests.md`](conformance-tests/scim-sanity-tests.md); note §2.1, where it is stricter
 than RFC 7644 §3.5.2 allows.
 
 ### Status of oracle 1 as of the port

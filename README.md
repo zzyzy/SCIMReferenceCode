@@ -367,9 +367,9 @@ reach.
 | [`docs/edupass-integration.md`](docs/edupass-integration.md) | The EduPass profile: auth, the User extension, provider obligations |
 | [`docs/net48-hosting.md`](docs/net48-hosting.md) | Hosting on .NET Framework: TLS, IIS, signing, the compat shim |
 | [`docs/scim-conformance.md`](docs/scim-conformance.md) | The RFC-derived spec both legs are verified against |
-| [`docs/entra-scim-validator.md`](docs/entra-scim-validator.md) | Running the Entra SCIM Validator against the sample: result, method, and the defects it found |
-| [`docs/scim2-cli-conformance.md`](docs/scim2-cli-conformance.md) | The `scim2-cli` compliance run: result, method, and the nine defects it found |
-| [`docs/scim-sanity-conformance.md`](docs/scim-sanity-conformance.md) | The `scim-sanity probe` run: result, method, and what a PATCH answers on each leg |
+| [`docs/conformance-tests/scimvalidator-microsoft.md`](docs/conformance-tests/scimvalidator-microsoft.md) | Running the Entra SCIM Validator against the sample: result, method, and the defects it found |
+| [`docs/conformance-tests/scim2-cli-tests.md`](docs/conformance-tests/scim2-cli-tests.md) | The `scim2-cli` compliance run: result, method, and the nine defects it found |
+| [`docs/conformance-tests/scim-sanity-tests.md`](docs/conformance-tests/scim-sanity-tests.md) | The `scim-sanity probe` run: result, method, and what a PATCH answers on each leg |
 | [`tests/integration/README.md`](tests/integration/README.md) | The test suite and its five hosts |
 
 ## 6. Changes from the Microsoft reference code
