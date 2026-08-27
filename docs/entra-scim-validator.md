@@ -45,10 +45,8 @@ and it accepted it. Read together with `scim-sanity`, which fails a 204 outright
 `scim2-cli`, which accepts either: the sample host now sits in all three oracles'
 intersection.
 
-The ngrok inspector retains captures across sessions, which is worth knowing before reading
-it: run 7's log showed six group PATCHes at 204 and six at 200 until the timestamps were
-checked, and the 204s were run 6's, from the previous day. Sort by time before concluding
-anything from that pane.
+Reading that traffic has a trap in it — the ngrok inspector retains captures across sessions,
+so run 7's pane appeared to show the change misfiring. See §7.2.
 
 Run 6 is a regression check rather than a new reading. The twelve defects
 [`scim2-cli-conformance.md`](scim2-cli-conformance.md) records were fixed between runs 5 and
@@ -351,3 +349,115 @@ does the work.
 Results are per-run: the validator generates fresh identifiers and values each time, and the
 in-memory store does not survive a restart, so counts are comparable across runs but individual
 values are not.
+
+### 7.1 Driving the validator with `playwright-cli`
+
+Run 7 was driven this way. The validator has no API, so the browser *is* the interface; this
+automates the clicking, not the judging. Every command below is PowerShell on Windows.
+
+**Why attach rather than open.** The site requires a signed-in Microsoft account.
+`playwright-cli attach --extension=chrome` joins the Chrome you are already signed into, so
+there is no credential to script and none to leak into this repository. A fresh
+`playwright-cli open` would land on a login page.
+
+**1. Host and tunnel.** As in §7, but with the tunnel's URL read back programmatically:
+
+```powershell
+# background: the host
+$env:SCIM_API_KEY="<key>"; $env:ASPNETCORE_ENVIRONMENT="Development"
+& ".\Microsoft.SCIM.WebHostSample.Net48\bin\Debug\net48\Microsoft.SCIM.WebHostSample.Net48.exe" http://localhost:5000
+
+# background: the tunnel
+ngrok http 5000 --host-header=localhost --log=stdout
+
+# foreground: what the tunnel is called, and whether it reaches the host
+$url = ((Invoke-RestMethod "http://127.0.0.1:4040/api/tunnels").tunnels |
+         Where-Object proto -eq https).public_url
+(Invoke-WebRequest "$url/scim/ServiceProviderConfig" `
+   -Headers @{Authorization="Bearer <key>"} -UseBasicParsing).StatusCode   # expect 200
+```
+
+Check that 200 before touching the browser. It separates "the tunnel is wrong" from "the
+validator is unhappy", which the validator's own error message will not do for you.
+
+**2. Attach, and open the site if it is not already open:**
+
+```powershell
+playwright-cli attach --extension=chrome
+playwright-cli -s=chrome goto https://scimvalidator.microsoft.com/
+playwright-cli -s=chrome snapshot --depth=25
+```
+
+Refs (`e70`, `e95`, …) are assigned per snapshot and change as the page changes. Re-snapshot
+after every navigation rather than reusing a ref across steps; `playwright-cli find "<text>"`
+re-locates one element without paying for a whole snapshot.
+
+**3. Discover Schema:**
+
+```powershell
+playwright-cli -s=chrome eval "el => el.click()" "getByTestId('getstartedview-discover-schema-button-id')"
+playwright-cli -s=chrome snapshot e78          # the form
+playwright-cli -s=chrome fill e95 "$url/scim"  # SCIM Endpoint
+playwright-cli -s=chrome fill e98 "<key>"      # Token
+playwright-cli -s=chrome eval "el => el.click()" e101   # Discover Schema (enabled once both are filled)
+```
+
+`Bearer Token` is the default of the two auth radios, which is the one API-key mode wants.
+The *Discover Schema* button stays `[disabled]` until both fields are non-empty, so a snapshot
+showing it disabled means a `fill` silently missed rather than that the site is broken.
+
+**4. Settings, to reproduce run 5–7 rather than the default three:**
+
+```powershell
+playwright-cli -s=chrome eval "el => el.click()" e118    # Settings tab
+playwright-cli -s=chrome snapshot e114
+playwright-cli -s=chrome eval "el => el.click()" e1254   # Run Tests Sequentially (Preview)
+playwright-cli -s=chrome eval "el => el.click()" e1288   # Supports Verbose PATCH (Preview)
+
+# confirm: the five settings checkboxes are the unlabelled ones at the end
+playwright-cli -s=chrome --raw eval "() => [...document.querySelectorAll('input[type=checkbox]')].map(c => c.getAttribute('aria-label') + '=' + c.checked).join('; ')"
+```
+
+The attribute rows are checkboxes too and there are hundreds of them, so read that list from
+the end. Only `Supports Verbose PATCH` changes what is sent — see §1.
+
+**5. Run, and read the result:**
+
+```powershell
+playwright-cli -s=chrome eval "el => el.click()" e1248   # Test Schema
+Start-Sleep -Seconds 25
+
+playwright-cli -s=chrome --raw eval "() => { const m = document.body.innerText.match(/Passed \d+\/\d+|Failed \d+\/\d+|Preview \d+\/\d+/g); const bad = [...document.querySelectorAll('.css-154n8c7')].map(e => (e.closest('div')?.parentElement?.innerText ?? '').replace(/\s+/g,' ').slice(0,80)); return JSON.stringify({summary: m, failing: [...new Set(bad)]}, null, 1) }"
+playwright-cli -s=chrome screenshot --filename=entra-validator-run<N>.png
+```
+
+The failing tests carry a distinct icon class — `css-154n8c7` at the time of run 7. It is a
+generated Chakra class and will not survive a redesign of the site, so if that selector
+returns `[]` while the summary says something failed, expand each *Show Details* and read
+them instead of trusting the empty list.
+
+**6. Clean up.** `detach`, not `close` — the Chrome being driven is the user's own:
+
+```powershell
+playwright-cli -s=chrome detach
+Get-Process ngrok, Microsoft.SCIM.WebHostSample.Net48 -ErrorAction SilentlyContinue | Stop-Process -Force
+```
+
+### 7.2 Three traps this method has already cost
+
+- **`click` times out on every button.** The page animates continuously, so Playwright's
+  actionability check never sees an element "stable" and gives up after 5s — on a button that
+  is perfectly clickable. `eval "el => el.click()"` dispatches the click directly and skips
+  that check. Reach for it as soon as a `click` reports *"waiting for element to be visible,
+  enabled and stable"* against an element the log shows it already resolved.
+- **The ngrok inspector retains captures across sessions.** Run 7's pane showed six group
+  PATCHes at 204 and six at 200, which read as the change misfiring; the 204s were run 6's,
+  from the previous day. Sort by `start` before concluding anything:
+  ```powershell
+  (Invoke-RestMethod "http://127.0.0.1:4040/api/requests/http?limit=200").requests |
+    Where-Object { $_.request.method -eq "PATCH" } |
+    Select-Object start, @{n='status';e={$_.response.status}}, @{n='uri';e={$_.request.uri}} |
+    Sort-Object start
+  ```
+- **`--host-header=localhost` is not optional**, and its absence looks like a validator fault
+  rather than a tunnel one — §2.1 has the reason.
