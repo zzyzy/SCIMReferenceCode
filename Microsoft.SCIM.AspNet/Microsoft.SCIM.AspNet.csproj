@@ -4,6 +4,8 @@
     <TargetFramework>net48</TargetFramework>
     <AssemblyName>Microsoft.SCIM.AspNet</AssemblyName>
     <RootNamespace>Microsoft.SCIM</RootNamespace>
+    <IsPackable>true</IsPackable>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
   </PropertyGroup>
 
   <ItemGroup>
