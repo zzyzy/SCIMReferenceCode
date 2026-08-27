@@ -224,6 +224,15 @@ for.
 
 Nothing. The suite passes 112 of 112.
 
+Re-run on 2026-08-27 after the PATCH response-code work in
+[`scim-sanity-conformance.md`](scim-sanity-conformance.md): still 112 of 112, no failures,
+errors or skips. That run is the one worth having, because a group PATCH now returns a body
+where it previously returned none — and this is the oracle that validates a response against
+the schema the service advertises for itself (§2.1), so it had never inspected that body
+before. The two oracles disagree about 204 in opposite directions and both now pass: this one
+accepts either status, `scim-sanity` accepts only 200. The sample host moved into the
+intersection rather than trading one oracle's pass for the other's failure.
+
 Two of these were carried for a round as "not defects" before being fixed: `active` was read as
 a model limitation not worth a breaking change, and the empty `members` array as a deliberate
 design decision. Both readings were wrong in the same way — each treated a limitation of this
